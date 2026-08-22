@@ -286,6 +286,14 @@ namespace DriftwoodHost
 			{
 				Logger.LogWarning("HostMode was set to false. It is being ignored: this game only builds its world for a local client, so a server without one would bind a port and host nothing.");
 			}
+			if (_config.CountHostPlayer)
+			{
+				// There is no host avatar to count. With the ghost suppressed this makes an empty
+				// server report one player, which means it is never seen as empty - and an
+				// occupied server is never reaped. It exists because the config contract has the
+				// key, not because it is ever the right answer.
+				Logger.LogWarning("CountHostPlayer is on. This server's own internal connection will be counted as a player and sold as a slot, so an empty server will report one player and will never be seen as empty.");
+			}
 			// The loopback connection occupies a transport slot either way. The only question is
 			// whether it is SOLD, and the answer is no unless somebody explicitly asked for it.
 			string slotFailure = SlotGuard.Configure(_transport, _config.MaxPlayers, hostMode: !_config.CountHostPlayer);
