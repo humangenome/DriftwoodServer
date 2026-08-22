@@ -18,5 +18,11 @@ jobs:
         run: dotnet build src/DriftwoodServer/DriftwoodServer.csproj -c Release
       - name: Test
         run: dotnet test src/DriftwoodServer.Tests/DriftwoodServer.Tests.csproj -c Release --no-build
+      - name: Build the host mod and the bench rig
+        # They compile against the game's own assemblies, which are never committed, so CI can only
+        # build them when a Managed directory is supplied. Skipped rather than silently passing.
+        run: echo "host mod build requires -p:ManagedDir=<game>/Managed; run locally"
       - name: Leak and clone-residue scan
         run: ./tools/ci/check-leaks.sh
+      - name: Required-files declaration
+        run: ./tools/ci/check-required-files.sh
