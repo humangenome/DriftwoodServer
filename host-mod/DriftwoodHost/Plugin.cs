@@ -89,6 +89,15 @@ namespace DriftwoodHost
 				return;
 			}
 
+			// The status surface comes up BEFORE anything that can refuse, so a server that will
+			// not host can still be asked WHY over HTTP instead of only leaving a file behind.
+			_readiness.Port = _config.Port;
+			_readiness.Slots = _config.MaxPlayers;
+			_readiness.WorldName = _config.WorldName;
+			_readiness.EffectiveBindAddress = _config.BindAddress;
+			_api = new HostHttpApi(_config.EffectiveHttpPort, _readiness, _config.AuthToken, WorldLifecycle.SaveNow);
+			_api.Start();
+
 			// Saves go into this server's own folder BEFORE anything writes one. The game's
 			// default is a per-user folder every instance on the box would share.
 			string configuredSaveDirectory = (_config.SaveRoot ?? string.Empty).Trim();
@@ -164,16 +173,7 @@ namespace DriftwoodHost
 
 			_readiness.Phase = HostPhase.Starting;
 			_readiness.Reason = "Loading the world";
-			_readiness.Port = _config.Port;
-			_readiness.Slots = _config.MaxPlayers;
-			_readiness.WorldName = _config.WorldName;
-			_readiness.EffectiveBindAddress = _config.BindAddress;
 			_readiness.Write();
-
-			// The status surface the panel's query companion calls, on port + 1. There is no A2S
-			// responder on this game at all, so this endpoint IS the query port.
-			_api = new HostHttpApi(_config.EffectiveHttpPort, _readiness, _config.AuthToken, WorldLifecycle.SaveNow);
-            _api.Start();
 
 			StartCoroutine(RunHost());
 			StartCoroutine(WatchStopFile());

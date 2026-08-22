@@ -216,7 +216,13 @@ namespace DriftwoodHost
 				return "WorldName cannot be \"local\" - the game reserves that name for the per-machine settings file and would overwrite it.";
 			if (WorldName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
 				return "WorldName contains characters that cannot be used in a file name.";
-			if (!string.IsNullOrWhiteSpace(SaveRoot) && !Path.IsPathRooted(SaveRoot.Trim()))
+			// REQUIRED, not optional. Unity's persistentDataPath is per Windows USER, not per
+			// instance, and no launch flag moves it - so an unset SaveRoot means every server on
+			// this machine reads and writes ONE save directory and quietly overwrites each other's
+			// world. There is no safe default, so there is no default.
+			if (string.IsNullOrWhiteSpace(SaveRoot))
+				return "SaveRoot is not set. Without it this server would save into a folder shared with every other server on this machine, and they would overwrite each other's worlds.";
+			if (!Path.IsPathRooted(SaveRoot.Trim()))
 				return "SaveRoot must be an absolute path.";
 			if (StartDelaySeconds < 0f || StartDelaySeconds > 300f)
 				return "StartDelaySeconds is outside the supported range of 0 to 300.";
