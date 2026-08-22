@@ -118,6 +118,8 @@ namespace DriftwoodHost
 		// worth keeping rather than reimplementing; only the interval needs setting.
 		internal static bool SetAutoSaveInterval(float minutes)
 		{
+			try
+			{
 			Type autoSaver = AccessTools.TypeByName("AutoSaver");
 			if (autoSaver == null) return false;
 			UnityEngine.Object instance = UnityEngine.Object.FindAnyObjectByType(autoSaver);
@@ -126,6 +128,12 @@ namespace DriftwoodHost
 			if (interval == null) return false;
 			interval.SetValue(instance, Mathf.Clamp(minutes, 1f, 60f));
 			return Mathf.Approximately((float)interval.GetValue(instance), Mathf.Clamp(minutes, 1f, 60f));
+			}
+			catch (Exception exception)
+			{
+				Plugin.Log?.LogWarning("Could not set the auto-save interval: " + exception.Message);
+				return false;
+			}
 		}
 
 		// ServerSettings' SyncVars default to friendly fire ON and one-shot OFF, and NEITHER is
@@ -133,6 +141,8 @@ namespace DriftwoodHost
 		// silently reverts on the next restart - and the panel would keep showing the old value.
 		internal static bool ApplyServerSettings(bool friendlyFire, bool oneShot)
 		{
+			try
+			{
 			Type type = AccessTools.TypeByName("ServerSettings");
 			if (type == null) return false;
 			object instance = AccessTools.Field(type, "Instance")?.GetValue(null);
@@ -153,15 +163,42 @@ namespace DriftwoodHost
 			bool friendlyOk = friendlyProperty == null || (bool)friendlyProperty.GetValue(null, null) == friendlyFire;
 			bool oneShotOk = oneShotProperty == null || (bool)oneShotProperty.GetValue(null, null) == oneShot;
 			return friendlyOk && oneShotOk;
+			}
+			catch (Exception exception)
+			{
+				Plugin.Log?.LogWarning("Could not apply the friendly-fire / one-shot settings: " + exception.Message);
+				return false;
+			}
 		}
 
+		// SaveManager.SaveServer dereferences NPCManager.Instance, BoatManager.Boat and
+		// EndGameManager.Instance with no null checks, so it CAN throw - most likely on a stop
+		// that arrives before the world has finished coming up. An exception escaping here would
+		// kill the coroutine that calls Application.Quit, leaving the server hung until something
+		// force-kills it, which is the worst possible outcome for a save routine.
 		internal static bool SaveNow()
 		{
-			Type saveManager = AccessTools.TypeByName("SaveManager");
-			MethodInfo save = saveManager == null ? null : AccessTools.Method(saveManager, "SaveServer");
-			if (save == null) return false;
-			save.Invoke(null, new object[] { true });
-			return true;
+			try
+			{
+				Type saveManager = AccessTools.TypeByName("SaveManager");
+				MethodInfo save = saveManager == null ? null : AccessTools.Method(saveManager, "SaveServer");
+				if (save == null)
+				{
+					Plugin.Log?.LogError("The game's save routine could not be found, so nothing was saved.");
+					return false;
+				}
+				save.Invoke(null, new object[] { true });
+				return true;
+			}
+			catch (Exception exception)
+			{
+				Exception inner = exception is TargetInvocationException invocation && invocation.InnerException != null
+					? invocation.InnerException
+					: exception;
+				Plugin.Log?.LogError("The game's save routine threw (" + inner.GetType().Name + ": " + inner.Message +
+					"). This usually means the world had not finished loading. Nothing was saved.");
+				return false;
+			}
 		}
 	}
 }

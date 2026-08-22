@@ -460,18 +460,36 @@ namespace DriftwoodHost
 				// Save explicitly, then let the game quit cleanly - SaveManager.OnApplicationQuit
 				// saves again on the way out, and Server.OnStopServer saves once more when the
 				// server connection stops. Three chances, one of which does not depend on us.
-				if (!WorldLifecycle.SaveNow())
+				//
+				// Nothing in this block may be allowed to throw past Application.Quit. A stop that
+				// silently fails to stop is worse than a stop that fails to save: the supervisor
+				// would sit through its whole graceful window and then force-kill, which is the
+				// one path that skips the game's own quit-time save as well.
+				try
 				{
-					Logger.LogError("Could not run the game's save routine on shutdown.");
+					if (!WorldLifecycle.SaveNow())
+					{
+						Logger.LogError("Could not run the game's save routine on shutdown.");
+					}
 				}
-				CloseTransport();
+				catch (Exception exception)
+				{
+					Logger.LogError("Shutdown save failed: " + exception.Message);
+				}
+				try { CloseTransport(); }
+				catch (Exception exception) { Logger.LogError("Shutdown transport close failed: " + exception.Message); }
 
 				_readiness.Phase = HostPhase.Stopped;
 				_readiness.Reason = "Stopped cleanly";
 				_readiness.ServerStarted = false;
 				_readiness.LocalClientStarted = false;
-				_readiness.Players = 0;
-				_readiness.Write();
+				_readiness.WorldObjectPresent = false;
+				_readiness.IslandLoaded = false;
+				// The world is down, so the population is UNKNOWN rather than zero - a stopped
+				// server must never look like a running-but-empty one to the reaper.
+				_readiness.Players = HostHttpApi.UnknownPlayers;
+				_readiness.SetRoster(new List<string>());
+				try { _readiness.Write(); } catch (Exception exception) { Logger.LogWarning("Final readiness write failed: " + exception.Message); }
 
 				TryDelete(_stopFilePath);
 				try { _api?.Dispose(); } catch { }
