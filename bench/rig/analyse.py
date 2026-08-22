@@ -48,3 +48,27 @@ if a and d:
     print()
     print("GHOST-HOST A/B (% of one i3-7100 core)")
     print(f"  suppressed (A): {a:.2f}%   not suppressed (D): {d:.2f}%   suppression saves {d-a:+.2f}%")
+
+# Lever table: everything measured against the uncapped idle baseline, so each lever's worth is
+# stated as points of one core rather than as a percentage of a percentage.
+base = cpu('B-1x-uncap') or cpu('A-1x')
+if base:
+    levers = [
+        ('F-physics30',      'physics step 0.01 -> 0.0333 (3.3x fewer steps)'),
+        ('G-tick20',         'netcode tick 50 -> 20 Hz'),
+        ('H-both',           'physics + tick together'),
+        ('I-pause-empty',    'world frozen while empty (timeScale 0)'),
+        ('K-uncapped',       'real limiter, uncapped (re-baseline)'),
+        ('K-cap30',          'real frame cap 30 fps'),
+        ('K-cap15',          'real frame cap 15 fps'),
+        ('K-cap5',           'real frame cap 5 fps'),
+        ('L-idle5-cap30',    '5 fps while empty, 30 fps with players'),
+        ('M-idle5-then-join','...and a client joins'),
+    ]
+    printed = False
+    for tag, what in levers:
+        v = cpu(tag)
+        if v is None: continue
+        if not printed:
+            print(); print(f"LEVERS (baseline = uncapped idle {base:.2f}% of one i3-7100 core)"); printed = True
+        print(f"  {tag:20s} {v:6.2f}%   {v-base:+6.2f} pts  ({(v-base)/base*100:+5.1f}%)   {what}")
