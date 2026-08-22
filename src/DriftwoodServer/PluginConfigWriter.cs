@@ -53,6 +53,8 @@ internal static class PluginConfigWriter
         text.AppendLine($"SuppressGhostHost = {Bool(options.SuppressGhostHost)}");
         text.AppendLine();
         text.AppendLine("[Performance]");
+        text.AppendLine($"PauseWorldWhenEmpty = {Bool(options.PauseWorldWhenEmpty)}");
+        text.AppendLine(Line("IdleFrameRate", options.IdleFrameRate));
         text.AppendLine(Line("TargetFrameRate", options.TargetFrameRate));
         text.AppendLine();
         text.AppendLine("[Paths]");
