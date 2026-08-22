@@ -8,6 +8,7 @@
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 fail=0
+bad() { printf 'FAIL: %s\n' "$*"; fail=1; }
 
 internal='sspanel|passrcon|gameserverid|b-cdn\.net|bitbucket\.org|survivalservers\.com/games/|[0-9]{1,3}(\.[0-9]{1,3}){3}:[0-9]{2,5}'
 clone='stormforge|Stormforge|lodestone|Lodestone|delverium|Delverium|witchspire|Witchspire|grounded2|Grounded2|bellwright|Bellwright|solarpunk|Solarpunk|Beryllium|libbulletc|EOSSDK|Hercules-Win64-Shipping'
@@ -34,16 +35,23 @@ if grep -rniE "$clone" --include='*.cs' --include='*.ps1' --include='*.sh' --inc
   fail=1
 fi
 
-[ "$fail" -eq 0 ] && printf 'leak check OK\n' || true
-exit "$fail"
 
-# The frame limiter is dead code unless something calls it. That exact failure shipped once: the
+# The frame limiter is dead code unless something CALLS it. That exact failure shipped once: the
 # class existed, the build was green, and every "capped" run was uncapped because the wiring edit
 # never landed. A grep is enough and it costs nothing.
 if [ -f "$root/host-mod/DriftwoodHost/FrameLimiter.cs" ]; then
-  grep -q 'FrameLimiter\.Apply(' "$root/host-mod/DriftwoodHost/Plugin.cs" \
-    || { printf 'FAIL: FrameLimiter exists but Plugin.cs never calls FrameLimiter.Apply - every capped run would be uncapped\n'; exit 1; }
-  grep -q 'FrameLimiter\.SetIdleFrameRate(' "$root/host-mod/DriftwoodHost/Plugin.cs" \
-    || { printf 'FAIL: FrameLimiter.SetIdleFrameRate is never called - the idle-rate lever would be inert\n'; exit 1; }
+  # Comment lines do not count as calls. Checking that without stripping them is how a check
+  # passes on the exact edit it exists to catch - commenting the call out.
+  live_plugin="$(grep -v '^[[:space:]]*//' "$root/host-mod/DriftwoodHost/Plugin.cs")"
+  printf '%s' "$live_plugin" | grep -q 'FrameLimiter\.Apply(' \
+    || bad "FrameLimiter exists but Plugin.cs never calls FrameLimiter.Apply - every capped run would be uncapped"
+  printf '%s' "$live_plugin" | grep -q 'FrameLimiter\.SetIdleFrameRate(' \
+    || bad "FrameLimiter.SetIdleFrameRate is never called - the idle-rate lever would be inert"
 fi
-printf 'wiring check OK\n'
+if [ -f "$root/host-mod/DriftwoodHost/EmptyWorldPause.cs" ]; then
+  grep -v '^[[:space:]]*//' "$root/host-mod/DriftwoodHost/Plugin.cs" | grep -q 'EmptyWorldPause\.Update(' \
+    || bad "EmptyWorldPause exists but is never driven - the empty-world lever would be inert"
+fi
+
+[ "$fail" -eq 0 ] && printf 'leak check OK\n' || true
+exit "$fail"
