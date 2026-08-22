@@ -38,6 +38,9 @@ namespace DriftwoodBenchClient
 		private FieldInfo _sprintInputField;
 		private object _movement;
 		private float _nextTurn;
+		private float _nextHop;
+		private Vector3 _origin;
+		private int _hops;
 		private Vector2 _direction = Vector2.up;
 		private readonly System.Random _random = new System.Random();
 
@@ -141,7 +144,8 @@ namespace DriftwoodBenchClient
 			{
 				yield return new WaitForSecondsRealtime(5f);
 				Logger.LogInfo("BENCH alive players=" + (PlayerManager.Players?.Count ?? -1) +
-					" pos=" + (Player.LocalPlayer != null ? Player.LocalPlayer.Transform.position.ToString("F1") : "?"));
+					" pos=" + (Player.LocalPlayer != null ? Player.LocalPlayer.Transform.position.ToString("F1") : "?") +
+					" hops=" + _hops);
 			}
 		}
 
@@ -149,19 +153,40 @@ namespace DriftwoodBenchClient
 
 		private void FixedUpdate()
 		{
-			// Belt and braces. If the game still refuses to move the character, push the rigidbody
-			// directly so the host has a genuinely moving body to simulate and replicate. A bench
-			// rig that measures a stationary player is measuring the wrong thing.
+			// THREE escalating ways to make the character move, because two of them did not work.
+			//
+			// 1. Drive _moveInput (in Update). Blocked while the intro and tutorial hold the player.
+			// 2. Push the rigidbody directly. Still produced a stationary player - the movement
+			//    component appears to be disabled or to zero the velocity while the intro runs.
+			// 3. Use the game's OWN teleport, which is what this does. Player.LocalTeleport sets
+			//    _sendTeleport, and the next tick sends the new position and rotation to the server
+			//    through Server.UpdatePlayerPosRot. That guarantees the host processes real position
+			//    updates and moves a real body in the world, which is the load being measured.
+			//
+			// A bench rig that measures a stationary player is measuring the wrong thing, and it
+			// says so in the log rather than reporting a number nobody can interpret.
 			if (!_walk.Value || Player.LocalPlayer == null) return;
 			try
 			{
 				Rigidbody body = Player.LocalPlayer.Rigidbody;
-				if (body == null) return;
-				Vector3 wanted = new Vector3(_direction.x, 0f, _direction.y) * 4f;
-				Vector3 current = body.linearVelocity;
-				if (new Vector2(current.x, current.z).sqrMagnitude < 1f)
+				if (body != null)
 				{
-					body.linearVelocity = new Vector3(wanted.x, current.y, wanted.z);
+					Vector3 wanted = new Vector3(_direction.x, 0f, _direction.y) * 4f;
+					Vector3 current = body.linearVelocity;
+					if (new Vector2(current.x, current.z).sqrMagnitude < 1f)
+					{
+						body.linearVelocity = new Vector3(wanted.x, current.y, wanted.z);
+					}
+				}
+
+				if (Time.realtimeSinceStartup >= _nextHop)
+				{
+					_nextHop = Time.realtimeSinceStartup + 0.5f;
+					Vector3 from = _origin == Vector3.zero ? Player.LocalPlayer.Transform.position : _origin;
+					if (_origin == Vector3.zero) _origin = from;
+					Vector3 to = _origin + new Vector3(_direction.x, 0f, _direction.y) * (float)(_random.NextDouble() * 12.0 + 2.0);
+					Player.LocalPlayer.LocalTeleport(to, (float)(_random.NextDouble() * 360.0));
+					_hops++;
 				}
 			}
 			catch
