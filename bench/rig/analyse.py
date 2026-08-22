@@ -58,12 +58,13 @@ if base:
         ('G-tick20',         'netcode tick 50 -> 20 Hz'),
         ('H-both',           'physics + tick together'),
         ('I-pause-empty',    'world frozen while empty (timeScale 0)'),
-        ('K-uncapped',       'real limiter, uncapped (re-baseline)'),
-        ('K-cap30',          'real frame cap 30 fps'),
-        ('K-cap15',          'real frame cap 15 fps'),
-        ('K-cap5',           'real frame cap 5 fps'),
         ('L-idle5-cap30',    '5 fps while empty, 30 fps with players'),
-        ('M-idle5-then-join','...and a client joins'),
+        ('N-idle5-and-pause','5 fps while empty AND the world frozen'),
+        ('M-both-then-join', '...both stood down, and a client joins'),
+        ('P-uncapped',       'wired limiter, uncapped (re-baseline)'),
+        ('P-cap30',          'real frame cap 30 fps'),
+        ('P-cap15',          'real frame cap 15 fps'),
+        ('P-cap5',           'real frame cap 5 fps'),
     ]
     printed = False
     for tag, what in levers:
