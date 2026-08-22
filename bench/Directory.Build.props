@@ -1,0 +1,8 @@
+<Project>
+  <!-- Bench rigs compile against Unity and the game's own assemblies, which predate nullable
+       reference types. Same reason as host-mod/Directory.Build.props. -->
+  <PropertyGroup>
+    <DriftwoodStrict>false</DriftwoodStrict>
+  </PropertyGroup>
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+</Project>

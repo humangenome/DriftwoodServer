@@ -1,0 +1,15 @@
+bin/
+obj/
+artifacts/
+.vs/
+.idea/
+*.user
+*.suo
+appsettings.local.json
+*.pdb
+*.zip
+
+# Game binaries. These are Dazed Games' property and are never committed.
+host-mod/DriftwoodHost/refs/
+host-mod/DriftwoodHost/BepInEx.dll
+host-mod/DriftwoodHost/0Harmony.dll

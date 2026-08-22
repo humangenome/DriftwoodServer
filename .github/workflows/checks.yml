@@ -1,0 +1,22 @@
+name: checks
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Version consistency
+        run: ./tools/ci/assert-version.sh
+      - name: Build the supervisor
+        run: dotnet build src/DriftwoodServer/DriftwoodServer.csproj -c Release
+      - name: Test
+        run: dotnet test src/DriftwoodServer.Tests/DriftwoodServer.Tests.csproj -c Release --no-build
+      - name: Leak and clone-residue scan
+        run: ./tools/ci/check-leaks.sh

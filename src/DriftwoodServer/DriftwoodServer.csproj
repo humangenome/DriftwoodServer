@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>DriftwoodServer</RootNamespace>
+    <AssemblyName>DriftwoodServer</AssemblyName>
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="DriftwoodServer.Tests" />
+  </ItemGroup>
+</Project>

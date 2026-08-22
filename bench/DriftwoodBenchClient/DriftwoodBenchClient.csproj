@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>DriftwoodBenchClient</AssemblyName>
+    <RootNamespace>DriftwoodBenchClient</RootNamespace>
+    <DebugType>none</DebugType>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <NoWarn>$(NoWarn);MSB3277;CS0436</NoWarn>
+    <AssemblySearchPaths>$(AssemblySearchPaths);$(ManagedDir)</AssemblySearchPaths>
+    <HostModDir>$(MSBuildThisFileDirectory)../../host-mod/DriftwoodHost/</HostModDir>
+    <ManagedDir Condition="'$(ManagedDir)' == ''">$(HostModDir)refs</ManagedDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Shared with the host mod: the client is headless too, so it needs the same headless
+         patches, the same Steam boundary guards and the same silence. Linked rather than copied
+         so a fix in one is a fix in both. -->
+    <Compile Include="$(HostModDir)Silence.cs" Link="Shared/Silence.cs" />
+    <Compile Include="$(HostModDir)PatchPlan.cs" Link="Shared/PatchPlan.cs" />
+    <Compile Include="$(HostModDir)SwallowCounter.cs" Link="Shared/SwallowCounter.cs" />
+    <Compile Include="$(HostModDir)HeadlessPatches.cs" Link="Shared/HeadlessPatches.cs" />
+    <Compile Include="$(HostModDir)SteamGuards.cs" Link="Shared/SteamGuards.cs" />
+    <Compile Include="$(HostModDir)DriftwoodIdentity.cs" Link="Shared/DriftwoodIdentity.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="BepInEx"><HintPath>$(HostModDir)BepInEx.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="0Harmony"><HintPath>$(HostModDir)0Harmony.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Assembly-CSharp"><HintPath>$(ManagedDir)\Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="FishNet.Runtime"><HintPath>$(ManagedDir)\FishNet.Runtime.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="FishyUnityTransport"><HintPath>$(ManagedDir)\FishyUnityTransport.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Unity.Networking.Transport"><HintPath>$(ManagedDir)\Unity.Networking.Transport.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine"><HintPath>$(ManagedDir)\UnityEngine.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="com.rlabrecque.steamworks.net"><HintPath>$(ManagedDir)\com.rlabrecque.steamworks.net.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(ManagedDir)\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.AudioModule"><HintPath>$(ManagedDir)\UnityEngine.AudioModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.PhysicsModule"><HintPath>$(ManagedDir)\UnityEngine.PhysicsModule.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+</Project>

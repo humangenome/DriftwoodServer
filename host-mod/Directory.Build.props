@@ -1,0 +1,10 @@
+<Project>
+  <!-- The host mod compiles against Unity 6000.4 and the game's own assemblies, which
+       predate nullable reference types. Turn the supervisor's strict settings off BEFORE
+       importing the repo-root props, then import them for the shared metadata and the
+       build-path leak assertion. -->
+  <PropertyGroup>
+    <DriftwoodStrict>false</DriftwoodStrict>
+  </PropertyGroup>
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+</Project>

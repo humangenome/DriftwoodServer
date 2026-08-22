@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>DriftwoodHost</AssemblyName>
+    <RootNamespace>DriftwoodHost</RootNamespace>
+    <DebugType>none</DebugType>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <!-- MSB3277: the game ships several assemblies at conflicting versions; the retail
+         build resolves them at runtime and we must not rewrite its bindings.
+         CS0436: the game's own types collide with framework facades in the ref set. -->
+    <NoWarn>$(NoWarn);MSB3277;CS0436</NoWarn>
+    <AssemblySearchPaths>$(AssemblySearchPaths);$(ManagedDir)</AssemblySearchPaths>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Point this at a real "How to Fish_Data\Managed" to compile against a live install.
+         The checked-in default is a local copy that is gitignored. -->
+    <ManagedDir Condition="'$(ManagedDir)' == ''">$(MSBuildThisFileDirectory)refs</ManagedDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="BepInEx"><HintPath>$(MSBuildThisFileDirectory)BepInEx.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="0Harmony"><HintPath>$(MSBuildThisFileDirectory)0Harmony.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Assembly-CSharp"><HintPath>$(ManagedDir)\Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="FishNet.Runtime"><HintPath>$(ManagedDir)\FishNet.Runtime.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="FishyUnityTransport"><HintPath>$(ManagedDir)\FishyUnityTransport.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Unity.Networking.Transport"><HintPath>$(ManagedDir)\Unity.Networking.Transport.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine"><HintPath>$(ManagedDir)\UnityEngine.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="com.rlabrecque.steamworks.net"><HintPath>$(ManagedDir)\com.rlabrecque.steamworks.net.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(ManagedDir)\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.AudioModule"><HintPath>$(ManagedDir)\UnityEngine.AudioModule.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+</Project>

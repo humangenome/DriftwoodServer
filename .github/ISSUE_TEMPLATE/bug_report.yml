@@ -1,0 +1,33 @@
+name: Bug report
+description: Something is broken in DriftwoodServer or the Driftwood host mod
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The version reported in the log line the supervisor prints at start.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: gameversion
+    attributes:
+      label: Game build
+      description: The How to Fish version, and the Steam build id if you have it.
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: bootreport
+    attributes:
+      label: Boot report
+      description: >
+        The patch-plan block from the start of the log, plus host-ready.json if you have it.
+        These two answer most questions on their own.
+      render: text

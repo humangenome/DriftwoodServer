@@ -1,0 +1,82 @@
+using DriftwoodServer;
+using Xunit;
+
+namespace DriftwoodServer.Tests;
+
+public class PluginConfigTests
+{
+    private static HostOptions Options() => new()
+    {
+        InstanceId = "gs123",
+        GameRoot = "/tmp/game",
+        StateRoot = "/tmp/state",
+        SaveRoot = "/tmp/saves",
+        GamePort = 7801,
+        Slots = 4,
+        TargetFrameRate = 30,
+        WorldName = "Driftwood",
+        SuppressGhostHost = true
+    };
+
+    private static ReadinessDocument Matching() => new()
+    {
+        Port = 7801,
+        Slots = 4,
+        EffectiveTargetFrameRate = 30,
+        WorldName = "Driftwood",
+        GhostHostSuppressed = true,
+        SaveDirectory = "/tmp/saves/"
+    };
+
+    [Fact]
+    public void AcceptsAServerThatMatchesItsConfig()
+    {
+        Assert.Null(PluginConfigWriter.AssertTookEffect(Options(), Matching()));
+    }
+
+    [Fact]
+    public void CatchesASlotLimitThatDidNotTakeEffect()
+    {
+        // The exact Lodestone bug: the number was written, and the running server enforces
+        // something else.
+        ReadinessDocument readiness = Matching();
+        readiness.Slots = 8;
+        string? reason = PluginConfigWriter.AssertTookEffect(Options(), readiness);
+        Assert.NotNull(reason);
+        Assert.Contains("slots", reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void CatchesAFrameCapThatDidNotTakeEffect()
+    {
+        ReadinessDocument readiness = Matching();
+        readiness.EffectiveTargetFrameRate = -1;
+        Assert.NotNull(PluginConfigWriter.AssertTookEffect(Options(), readiness));
+    }
+
+    [Fact]
+    public void CatchesSavesLandingSomewhereShared()
+    {
+        ReadinessDocument readiness = Matching();
+        readiness.SaveDirectory = "C:/Users/Administrator/AppData/LocalLow/Dazed Games/How to Fish/Saves/";
+        string? reason = PluginConfigWriter.AssertTookEffect(Options(), readiness);
+        Assert.NotNull(reason);
+        Assert.Contains("overwritten", reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void CatchesAGhostHostThatWasNotSuppressed()
+    {
+        ReadinessDocument readiness = Matching();
+        readiness.GhostHostSuppressed = false;
+        Assert.NotNull(PluginConfigWriter.AssertTookEffect(Options(), readiness));
+    }
+
+    [Fact]
+    public void CatchesTheWrongWorld()
+    {
+        ReadinessDocument readiness = Matching();
+        readiness.WorldName = "SomeoneElsesWorld";
+        Assert.NotNull(PluginConfigWriter.AssertTookEffect(Options(), readiness));
+    }
+}
