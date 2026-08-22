@@ -13,3 +13,8 @@ appsettings.local.json
 host-mod/DriftwoodHost/refs/
 host-mod/DriftwoodHost/BepInEx.dll
 host-mod/DriftwoodHost/0Harmony.dll
+
+# Packaged output and staged runtime packs: build products and third-party
+# redistributables, rebuilt by scripts/. The BepInEx runtime the overlay ships
+# lives in dist/bepinex-mono/ and is not ours to commit.
+dist/

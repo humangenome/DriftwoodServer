@@ -5,7 +5,15 @@
     <AssemblyName>DriftwoodHost</AssemblyName>
     <RootNamespace>DriftwoodHost</RootNamespace>
     <DebugType>none</DebugType>
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <!-- MUST stay true. With it off the compiler emits no AssemblyFileVersion attribute, so
+         the DLL's Win32 version resource is 0.0.0.0 no matter what -p:FileVersion says. The
+         host side reads that resource on every start
+         (it reads (Get-Item DriftwoodHost.dll).VersionInfo.FileVersion)
+         and requires it to equal the pinned tag. A 0.0.0.0 stamp can never match, so every
+         start would log "DriftwoodHost.dll disagrees, forcing re-copy" and re-robocopy the
+         whole loader tree forever, on every server, in silence. Caught by the FileVersion
+         assert in scripts/package-server-overlay.sh, which exists for exactly this. -->
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <!-- MSB3277: the game ships several assemblies at conflicting versions; the retail
          build resolves them at runtime and we must not rewrite its bindings.
          CS0436: the game's own types collide with framework facades in the ref set. -->

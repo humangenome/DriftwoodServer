@@ -24,13 +24,15 @@ while IFS= read -r -d '' artefact; do
 done < <(find "$root" -path '*/bin/Release/*' \( -name 'Driftwood*.dll' -o -name 'Driftwood*.exe' \) -print0)
 
 # Source-level clone residue, which a strings pass over binaries cannot see in comments that were
-# compiled away.
+# compiled away. scripts/ is scanned too: it carries the packaging and publishing chain -- CDN
+# paths, the storage-zone prefix, the overlay layout -- which is exactly where a sibling's name
+# survives a clone and points a whole fleet at the wrong bucket.
 if grep -rniE "$clone" --include='*.cs' --include='*.ps1' --include='*.sh' --include='*.csproj' \
-     "$root/src" "$root/host-mod" "$root/tools" 2>/dev/null \
+     "$root/src" "$root/host-mod" "$root/tools" "$root/scripts" 2>/dev/null \
    | grep -v 'check-leaks.sh' | grep -vE '^\s*[^:]+:[0-9]+:\s*//' | grep -q .; then
   printf 'FAIL: clone residue in source outside comments:\n'
   grep -rniE "$clone" --include='*.cs' --include='*.ps1' --include='*.sh' --include='*.csproj' \
-    "$root/src" "$root/host-mod" "$root/tools" 2>/dev/null \
+    "$root/src" "$root/host-mod" "$root/tools" "$root/scripts" 2>/dev/null \
     | grep -v 'check-leaks.sh' | grep -vE '^\s*[^:]+:[0-9]+:\s*//' | head -10 | sed 's/^/    /'
   fail=1
 fi
