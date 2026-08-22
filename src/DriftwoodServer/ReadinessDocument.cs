@@ -31,6 +31,11 @@ internal sealed class ReadinessDocument
     [JsonPropertyName("ghostHostSuppressed")] public bool GhostHostSuppressed { get; set; }
     [JsonPropertyName("displayNamesResolved")] public bool DisplayNamesResolved { get; set; }
     [JsonPropertyName("effectiveTargetFrameRate")] public int EffectiveTargetFrameRate { get; set; }
+    // Whether the hand-padded limiter is installed. The engine's own targetFrameRate is NOT
+    // evidence of a cap - it is ignored in batch mode and still reads back as though it took.
+    [JsonPropertyName("frameLimiterActive")] public bool FrameLimiterActive { get; set; }
+    [JsonPropertyName("actualFrameRate")] public double ActualFrameRate { get; set; }
+    [JsonPropertyName("loopIdling")] public bool LoopIdling { get; set; }
     [JsonPropertyName("swallowedTotal")] public long SwallowedTotal { get; set; }
     [JsonPropertyName("patchesApplied")] public string[] PatchesApplied { get; set; } = [];
     [JsonPropertyName("patchesMissing")] public string[] PatchesMissing { get; set; } = [];

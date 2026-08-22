@@ -23,6 +23,7 @@ public class PluginConfigTests
         Port = 7801,
         Slots = 4,
         EffectiveTargetFrameRate = 30,
+        FrameLimiterActive = true,
         WorldName = "Driftwood",
         GhostHostSuppressed = true,
         SaveDirectory = "/tmp/saves/"
@@ -70,6 +71,33 @@ public class PluginConfigTests
         ReadinessDocument readiness = Matching();
         readiness.GhostHostSuppressed = false;
         Assert.NotNull(PluginConfigWriter.AssertTookEffect(Options(), readiness));
+    }
+
+    [Fact]
+    public void CatchesACapConfiguredWithNoLimiterRunning()
+    {
+        // The engine reports targetFrameRate back as though it took even though batch mode ignores
+        // it, so the ONLY evidence a cap is in force is the limiter being installed. This shipped
+        // as dead code once and three measurement runs were silently uncapped.
+        ReadinessDocument readiness = Matching();
+        readiness.FrameLimiterActive = false;
+        string? reason = PluginConfigWriter.AssertTookEffect(Options(), readiness);
+        Assert.NotNull(reason);
+        Assert.Contains("uncapped", reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void CatchesAnIdleRateConfiguredWithNoLimiterRunning()
+    {
+        HostOptions options = Options();
+        options.TargetFrameRate = 0;
+        options.IdleFrameRate = 5;
+        ReadinessDocument readiness = Matching();
+        readiness.EffectiveTargetFrameRate = 0;
+        readiness.FrameLimiterActive = false;
+        string? reason = PluginConfigWriter.AssertTookEffect(options, readiness);
+        Assert.NotNull(reason);
+        Assert.Contains("full speed", reason, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

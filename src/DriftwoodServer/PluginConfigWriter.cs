@@ -79,6 +79,17 @@ internal static class PluginConfigWriter
             return $"The server is running at a frame cap of {readiness.EffectiveTargetFrameRate} but was configured for {options.TargetFrameRate}, so its configuration did not take effect.";
         if (!string.Equals(readiness.WorldName, options.WorldName, StringComparison.Ordinal))
             return $"The server loaded the world \"{readiness.WorldName}\" but was configured for \"{options.WorldName}\", so its configuration did not take effect.";
+        // A configured cap with no limiter means the server is UNCAPPED, whatever the engine says.
+        // This is the field that exists because the limiter once shipped as dead code and three
+        // "capped" measurement runs were silently uncapped.
+        if (options.TargetFrameRate > 0 && !readiness.FrameLimiterActive)
+        {
+            return $"The server was configured with a {options.TargetFrameRate} fps cap but its frame limiter is not running, so it is uncapped and will use far more CPU than expected.";
+        }
+        if (options.IdleFrameRate > 0 && !readiness.FrameLimiterActive)
+        {
+            return "The server was configured to slow down while empty but its frame limiter is not running, so it will run at full speed with nobody connected.";
+        }
         if (options.SuppressGhostHost && !readiness.GhostHostSuppressed)
             return "The server is running a placeholder host character that should have been suppressed, so it would appear as a phantom player.";
         if (!SameDirectory(readiness.SaveDirectory, options.SaveRoot))
