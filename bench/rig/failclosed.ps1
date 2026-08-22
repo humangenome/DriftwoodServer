@@ -49,6 +49,11 @@ $bl = "$dst\BepInEx\LogOutput.log"
 if (Test-Path $bl) { Get-Content $bl | Select-String 'WILL NOT HOST|REQUIRED PATCH|FAULT INJECTION' | ForEach-Object { Say ("  " + $_.Line) } }
 
 Stop-Process -Id $p.Id -Force -EA SilentlyContinue
+# Wait for the process to actually go before re-deploying: copying the plugin over a DLL the dying
+# process still has mapped fails with "a file with a user-mapped section open", which killed the
+# first chained run at exactly this line.
+for ($w = 0; $w -lt 20; $w++) { Start-Sleep -Seconds 1; if ($p.HasExited) { break } }
+Start-Sleep -Seconds 3
 # Put the instance back the way it was so nothing downstream inherits fault injection.
 & C:\deploy.ps1 -Instance 1 -Slots 8 -Fps 30 | Out-Null
 Say "=== FAILCLOSED_DONE ==="
