@@ -81,7 +81,7 @@ internal sealed class HostApplication
             health = new HealthEndpoint(_options.HttpPort, _status);
             healthTask = health.RunAsync(background.Token);
 
-            ReadinessDocument? readiness = await WaitForWorldAsync(game, cancellationToken).ConfigureAwait(false);
+            ReadinessDocument? readiness = await WaitForWorldAsync(game, pinnedBuildId, cancellationToken).ConfigureAwait(false);
             if (readiness is null)
             {
                 requestedStop = true;
@@ -202,14 +202,14 @@ internal sealed class HostApplication
         }
     }
 
-    private async Task<ReadinessDocument?> WaitForWorldAsync(GameProcess game, CancellationToken cancellationToken)
+    private async Task<ReadinessDocument?> WaitForWorldAsync(GameProcess game, string pinnedBuildId, CancellationToken cancellationToken)
     {
         DateTimeOffset deadline = DateTimeOffset.UtcNow.AddSeconds(_options.WorldReadyTimeoutSeconds);
         while (DateTimeOffset.UtcNow < deadline)
         {
             if (game.HasExited)
             {
-                Refuse($"This server stopped while loading its world (exit code {await game.ExitTask.ConfigureAwait(false)}).", string.Empty, game.Id);
+                Refuse($"This server stopped while loading its world (exit code {await game.ExitTask.ConfigureAwait(false)}).", pinnedBuildId, game.Id);
                 return null;
             }
             ReadinessDocument? readiness = ReadinessDocument.TryRead(_options.ReadinessPath);
@@ -219,14 +219,14 @@ internal sealed class HostApplication
                 {
                     // The host mod refused. Its sentence is the useful one - pass it through
                     // rather than replacing it with a generic timeout message.
-                    Refuse(readiness.Reason, string.Empty, game.Id, readiness);
+                    Refuse(readiness.Reason, pinnedBuildId, game.Id, readiness);
                     return null;
                 }
                 if (readiness.WorldRunning) return readiness;
             }
             await Task.Delay(TimeSpan.FromSeconds(_options.PollSeconds), cancellationToken).ConfigureAwait(false);
         }
-        Refuse($"This server's world did not finish loading within {_options.WorldReadyTimeoutSeconds} seconds, so it reports as down rather than as a healthy server with nothing behind it.", string.Empty, game.Id);
+        Refuse($"This server's world did not finish loading within {_options.WorldReadyTimeoutSeconds} seconds, so it reports as down rather than as a healthy server with nothing behind it.", pinnedBuildId, game.Id);
         return null;
     }
 
