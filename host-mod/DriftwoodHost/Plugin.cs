@@ -481,6 +481,8 @@ namespace DriftwoodHost
 
 				EmptyWorldPause.Update(_readiness.WorldRunning, _readiness.Players);
 				_readiness.WorldPaused = EmptyWorldPause.Paused;
+				_readiness.LoopIdling = FrameLimiter.Idling;
+				_readiness.IdleTransitions = FrameLimiter.IdleTransitions;
 				_readiness.WorldResumeCount = EmptyWorldPause.ResumeCount;
 			}
 			catch (Exception exception)

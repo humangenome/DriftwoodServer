@@ -9,7 +9,8 @@ param(
   [int]$Clients = 0,
   [string]$PhysicsStep = '0',
   [int]$TickRate = 0,
-  [string]$PauseEmpty = 'false'
+  [string]$PauseEmpty = 'false',
+  [int]$IdleFps = 0
 )
 $ErrorActionPreference = 'Continue'
 $log = "C:\driftbench\samples\$Tag.log"
@@ -19,7 +20,7 @@ New-Item -ItemType Directory -Force -Path 'C:\driftbench\samples' | Out-Null
 & C:\stopall.ps1 *>> $log
 Start-Sleep -Seconds 3
 for ($i = 1; $i -le $Instances; $i++) {
-  & C:\deploy.ps1 -Instance $i -Slots 8 -Fps $Fps -World $World -Suppress $Suppress -PhysicsStep $PhysicsStep -TickRate $TickRate -PauseEmpty $PauseEmpty *>> $log
+  & C:\deploy.ps1 -Instance $i -Slots 8 -Fps $Fps -World $World -Suppress $Suppress -PhysicsStep $PhysicsStep -TickRate $TickRate -PauseEmpty $PauseEmpty -IdleFps $IdleFps *>> $log
 }
 & C:\launch.ps1 -From 1 -To $Instances *>> $log
 

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Threading;
+using FishNet;
 using UnityEngine;
 
 namespace DriftwoodHost
@@ -27,8 +28,18 @@ namespace DriftwoodHost
 		private readonly Stopwatch _clock = Stopwatch.StartNew();
 		private double _nextFrameMs;
 		private int _targetFrameRate;
+		private int _idleFrameRate;
+		private bool _idling;
 
 		internal static double MeasuredSleepMs { get; private set; }
+		// True while the loop is running at the reduced empty-server rate.
+		internal static bool Idling { get; private set; }
+		internal static int IdleTransitions { get; private set; }
+
+		internal static void SetIdleFrameRate(int idleFrameRate)
+		{
+			if (_instance != null) _instance._idleFrameRate = idleFrameRate;
+		}
 
 		internal static void Apply(int targetFrameRate)
 		{
@@ -46,10 +57,40 @@ namespace DriftwoodHost
 				: "Frame limiter off; the server runs its loop as fast as it can.");
 		}
 
+		// THE EMPTY-SERVER RATE. Measured: cutting physics steps 3.3x and the netcode tick 2.5x
+		// together buy 4 points out of 49, so ~90% of an idle server's cost is the FRAME LOOP - and
+		// the loop runs unbounded at 440-497 fps because Unity ignores targetFrameRate in batch
+		// mode. Freezing the simulation clock therefore cannot deliver the "empty server costs
+		// approximately nothing" shape; slowing the LOOP can.
+		//
+		// The netcode ticks inside this same loop, so the rate cannot go to zero - a join has to
+		// still be processed. At 5 fps the server still services connections five times a second
+		// and returns to full rate within one frame of anybody arriving.
+		private int CurrentTarget()
+		{
+			if (_idleFrameRate <= 0) return _targetFrameRate;
+			int transportClients;
+			try { transportClients = InstanceFinder.ServerManager?.Clients?.Count ?? 0; }
+			catch { return _targetFrameRate; }
+			// The host's own loopback connection is not a player, so "empty" is one connection.
+			bool empty = transportClients <= 1;
+			if (empty != _idling)
+			{
+				_idling = empty;
+				Idling = empty;
+				IdleTransitions++;
+				Plugin.Log?.LogInfo(empty
+					? "Nobody is connected: dropping the server loop to " + _idleFrameRate + " fps."
+					: "A player arrived: restoring the server loop to " + (_targetFrameRate > 0 ? _targetFrameRate + " fps" : "full rate") + ".");
+			}
+			return empty ? _idleFrameRate : _targetFrameRate;
+		}
+
 		private void LateUpdate()
 		{
-			if (_targetFrameRate <= 0) return;
-			double period = 1000.0 / _targetFrameRate;
+			int target = CurrentTarget();
+			if (target <= 0) return;
+			double period = 1000.0 / target;
 			double now = _clock.Elapsed.TotalMilliseconds;
 			_nextFrameMs += period;
 			// If we fell behind - a long frame, a world load, a GC pause - do not try to catch up by

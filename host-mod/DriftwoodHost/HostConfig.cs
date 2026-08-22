@@ -68,6 +68,9 @@ namespace DriftwoodHost
 		// exist so the levers are measurable without a rebuild, not so they can be turned casually.
 		// Lever 3: freeze the world while nobody is connected. DEFAULT OFF until a real client has
 		// been proven to join a paused server, spawn and move.
+		// Run the server loop at this rate while nobody is connected. 0 = off. This is the lever the
+		// measurements point at: the idle cost is the frame loop, not the simulation clock.
+		public int IdleFrameRate;
 		public bool PauseWorldWhenEmpty;
 		public float PhysicsStepSeconds;
 		public int NetworkTickRate;
@@ -140,6 +143,8 @@ namespace DriftwoodHost
 				"Host.SuppressGhostHost", "Server.SuppressGhostHost", "SuppressGhostHost", "HideHostPlayer");
 			config.TargetFrameRate = config.Int(config.TargetFrameRate,
 				"Server.TargetFrameRate", "Performance.TargetFrameRate", "TargetFrameRate", "FrameRate", "Fps");
+			config.IdleFrameRate = config.Int(config.IdleFrameRate,
+				"Performance.IdleFrameRate", "Server.IdleFrameRate", "IdleFrameRate", "EmptyFrameRate");
 			config.PauseWorldWhenEmpty = config.Bool(config.PauseWorldWhenEmpty,
 				"Performance.PauseWorldWhenEmpty", "Server.PauseWorldWhenEmpty", "PauseWorldWhenEmpty", "FreezeWhenEmpty");
 			config.PhysicsStepSeconds = config.Float(config.PhysicsStepSeconds,
@@ -349,6 +354,8 @@ namespace DriftwoodHost
 				return "WorldReadyTimeoutSeconds is outside the supported range of 30 to 1800.";
 			if (TargetFrameRate < 0 || TargetFrameRate > 1000)
 				return "TargetFrameRate is outside the supported range of 0 to 1000.";
+			if (IdleFrameRate != 0 && (IdleFrameRate < 1 || IdleFrameRate > 1000))
+				return "IdleFrameRate is outside the supported range of 1 to 1000; it cannot be zero because the netcode is serviced inside the same loop and a frozen loop could never accept a join.";
 			if (PhysicsStepSeconds != 0f && (PhysicsStepSeconds < 0.01f || PhysicsStepSeconds > 0.1f))
 				return "PhysicsStepSeconds is outside the safe range of 0.01 to 0.1 seconds; anything coarser makes fast-moving objects tunnel through the world.";
 			if (NetworkTickRate != 0 && (NetworkTickRate < 10 || NetworkTickRate > 128))

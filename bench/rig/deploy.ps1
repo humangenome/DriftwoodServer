@@ -7,7 +7,8 @@ param(
   [string]$Suppress = 'true',
   [string]$PhysicsStep = '0',
   [int]$TickRate = 0,
-  [string]$PauseEmpty = 'false'
+  [string]$PauseEmpty = 'false',
+  [int]$IdleFps = 0
 )
 $ErrorActionPreference = 'Stop'
 # Fleet band: 22003, stride 10. NOT 7777 - nine games on this fleet already default to 7777.
@@ -38,6 +39,7 @@ SuppressGhostHost = $Suppress
 TargetFrameRate = $Fps
 PhysicsStepSeconds = $PhysicsStep
 PauseWorldWhenEmpty = $PauseEmpty
+IdleFrameRate = $IdleFps
 NetworkTickRate = $TickRate
 
 [World]
@@ -58,4 +60,4 @@ Get-ChildItem "$dst\BepInEx\config" -Filter '*.driftwood.host.cfg' -EA SilentlyC
   Where-Object { $_.Name -ne 'com.humangenome.driftwood.host.cfg' } |
   ForEach-Object { Remove-Item $_.FullName -Force -EA SilentlyContinue }
 Set-Content -Path "$dst\BepInEx\config\com.humangenome.driftwood.host.cfg" -Value $cfg -Encoding UTF8
-Write-Output "deployed i$Instance port=$Port http=$($Port+1) slots=$Slots fps=$Fps physics=$PhysicsStep tick=$TickRate pauseEmpty=$PauseEmpty suppress=$Suppress world=$World"
+Write-Output "deployed i$Instance port=$Port http=$($Port+1) slots=$Slots fps=$Fps physics=$PhysicsStep tick=$TickRate pauseEmpty=$PauseEmpty idleFps=$IdleFps suppress=$Suppress world=$World"

@@ -74,6 +74,8 @@ namespace DriftwoodHost
 		public double EffectivePhysicsStepSeconds;
 		public int EffectiveNetworkTickRate;
 		public bool WorldPaused;
+		public bool LoopIdling;
+		public int IdleTransitions;
 		public int WorldResumeCount;
 		public List<string> PatchesApplied = new List<string>();
 		public List<string> PatchesMissing = new List<string>();
@@ -164,6 +166,8 @@ namespace DriftwoodHost
 					.Add("effectivePhysicsStepSeconds", EffectivePhysicsStepSeconds)
 					.Add("effectiveNetworkTickRate", EffectiveNetworkTickRate)
 					.Add("worldPaused", WorldPaused)
+					.Add("loopIdling", LoopIdling)
+					.Add("idleTransitions", IdleTransitions)
 					.Add("worldResumeCount", WorldResumeCount)
 					.Add("swallowedTotal", SwallowCounter.TotalSwallowed())
 					.AddRaw("swallowed", swallowJson.ToString())
