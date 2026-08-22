@@ -74,6 +74,7 @@ namespace DriftwoodHost
 		public double EffectivePhysicsStepSeconds;
 		public int EffectiveNetworkTickRate;
 		public bool WorldPaused;
+		public bool FrameLimiterActive;
 		public bool LoopIdling;
 		public int IdleTransitions;
 		public int WorldResumeCount;
@@ -166,6 +167,7 @@ namespace DriftwoodHost
 					.Add("effectivePhysicsStepSeconds", EffectivePhysicsStepSeconds)
 					.Add("effectiveNetworkTickRate", EffectiveNetworkTickRate)
 					.Add("worldPaused", WorldPaused)
+					.Add("frameLimiterActive", FrameLimiterActive)
 					.Add("loopIdling", LoopIdling)
 					.Add("idleTransitions", IdleTransitions)
 					.Add("worldResumeCount", WorldResumeCount)

@@ -238,8 +238,15 @@ namespace DriftwoodHost
 		{
 			int wanted = _config.TargetFrameRate;
 			QualitySettings.vSyncCount = 0;
+			// Set for completeness, but this is NOT what caps the loop: the batch-mode player
+			// IGNORES it and still reads the value back as though it took. Measured: 30 requested,
+			// 30 read back, 440-500 fps actually running.
 			Application.targetFrameRate = wanted <= 0 ? -1 : wanted;
-			_readiness.EffectiveTargetFrameRate = Application.targetFrameRate;
+			// The hand-padded limiter is what actually caps it.
+			FrameLimiter.Apply(wanted);
+			FrameLimiter.SetIdleFrameRate(_config.IdleFrameRate);
+			_readiness.EffectiveTargetFrameRate = wanted;
+			_readiness.FrameLimiterActive = FrameLimiter.Active;
 
 			// The physics step is wall-clock driven, so no frame cap touches it. Only change it on
 			// a deliberate decision - it is simulation fidelity, not overhead.
@@ -253,10 +260,11 @@ namespace DriftwoodHost
 				}
 			}
 			_readiness.EffectivePhysicsStepSeconds = Time.fixedDeltaTime;
-			if (wanted > 0 && Application.targetFrameRate != wanted)
+			// The engine's own value is never trusted as evidence here - actualFrameRate in the
+			// readiness document is the only thing that proves a cap is in force.
+			if (wanted > 0 && !FrameLimiter.Active)
 			{
-				Logger.LogWarning("Frame cap did not take: asked for " + wanted +
-					", the engine reports " + Application.targetFrameRate + ".");
+				Logger.LogError("A frame cap of " + wanted + " was configured but the limiter is not running, so this server is UNCAPPED. Check actualFrameRate before believing any cap.");
 			}
 		}
 

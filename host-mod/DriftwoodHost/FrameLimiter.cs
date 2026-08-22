@@ -34,6 +34,9 @@ namespace DriftwoodHost
 		internal static double MeasuredSleepMs { get; private set; }
 		// True while the loop is running at the reduced empty-server rate.
 		internal static bool Idling { get; private set; }
+		// Proof the limiter is installed at all. A configured cap with this false means the server
+		// is UNCAPPED, whatever the engine reports.
+		internal static bool Active => _instance != null;
 		internal static int IdleTransitions { get; private set; }
 
 		internal static void SetIdleFrameRate(int idleFrameRate)

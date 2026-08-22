@@ -36,3 +36,14 @@ fi
 
 [ "$fail" -eq 0 ] && printf 'leak check OK\n' || true
 exit "$fail"
+
+# The frame limiter is dead code unless something calls it. That exact failure shipped once: the
+# class existed, the build was green, and every "capped" run was uncapped because the wiring edit
+# never landed. A grep is enough and it costs nothing.
+if [ -f "$root/host-mod/DriftwoodHost/FrameLimiter.cs" ]; then
+  grep -q 'FrameLimiter\.Apply(' "$root/host-mod/DriftwoodHost/Plugin.cs" \
+    || { printf 'FAIL: FrameLimiter exists but Plugin.cs never calls FrameLimiter.Apply - every capped run would be uncapped\n'; exit 1; }
+  grep -q 'FrameLimiter\.SetIdleFrameRate(' "$root/host-mod/DriftwoodHost/Plugin.cs" \
+    || { printf 'FAIL: FrameLimiter.SetIdleFrameRate is never called - the idle-rate lever would be inert\n'; exit 1; }
+fi
+printf 'wiring check OK\n'
