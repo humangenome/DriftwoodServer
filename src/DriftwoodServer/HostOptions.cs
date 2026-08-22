@@ -33,6 +33,9 @@ internal sealed class HostOptions
     public bool FriendlyFire { get; set; } = true;
     public bool OneShotKills { get; set; }
     public double AutoSaveMinutes { get; set; } = 5;
+    // The token the host mod requires on every mutating route of its HTTP API. It is the
+    // customer's rcon password, so it is never logged and never written into a status file.
+    public string AuthToken { get; set; } = string.Empty;
 
     public int WorldReadyTimeoutSeconds { get; set; } = 240;
     public int ReadinessStaleSeconds { get; set; } = 30;

@@ -96,6 +96,10 @@ namespace DriftwoodHost
 
 	internal static class PatchPlan
 	{
+		// Comma-separated "Type.Method" ids that are FORCED to resolve as missing, so the
+		// fail-closed path can be exercised on demand. Off unless a config says otherwise.
+		internal static string[] SimulatedMissing = new string[0];
+
 		public static PatchReport Apply(Harmony harmony, IReadOnlyList<PatchTarget> targets, Action<string> log, Action<string> warn)
 		{
 			PatchReport report = new PatchReport();
@@ -103,6 +107,13 @@ namespace DriftwoodHost
 			// Pass 1 - resolve everything, touch nothing.
 			foreach (PatchTarget target in targets)
 			{
+				if (SimulatedMissing.Length > 0 &&
+					Array.Exists(SimulatedMissing, id => string.Equals(id, target.Id, StringComparison.OrdinalIgnoreCase)))
+				{
+					warn("FAULT INJECTION: treating " + target.Id + " as missing because SimulateMissingPatch says so.");
+					target.Outcome = ResolveOutcome.Missing;
+					continue;
+				}
 				try
 				{
 					Type type = AccessTools.TypeByName(target.TypeName);

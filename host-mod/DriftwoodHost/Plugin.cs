@@ -125,6 +125,18 @@ namespace DriftwoodHost
 			targets.AddRange(GhostHost.Targets());
 			targets.Add(SlotGuard.RefusalCounterTarget());
 
+			if (!string.IsNullOrWhiteSpace(_config.SimulateMissingPatch))
+			{
+				PatchPlan.SimulatedMissing = _config.SimulateMissingPatch
+					.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
+				for (int i = 0; i < PatchPlan.SimulatedMissing.Length; i++)
+				{
+					PatchPlan.SimulatedMissing[i] = PatchPlan.SimulatedMissing[i].Trim();
+				}
+				Logger.LogWarning("FAULT INJECTION IS ON. These patch targets are being treated as missing: " +
+					string.Join(", ", PatchPlan.SimulatedMissing) + ". Never leave this set on a customer server.");
+			}
+
 			Harmony harmony = new Harmony(Guid);
 			PatchReport report = PatchPlan.Apply(harmony, targets, Logger.LogInfo, Logger.LogWarning);
 			_readiness.PatchesApplied = report.Applied;

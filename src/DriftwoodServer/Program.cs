@@ -25,6 +25,22 @@ internal static class Program
                 return result.Ok ? 0 : 2;
             }
 
+            if (args.Length == 2 && args[0].Equals("--snapshot", StringComparison.OrdinalIgnoreCase))
+            {
+                // Panel-triggered backup of a RUNNING server. Save first, snapshot second - a
+                // snapshot taken before the flush captures the stale file the flush was meant to
+                // replace, and says nothing about it.
+                HostOptions snapshotOptions = HostOptions.Load(args[1]);
+                using CancellationTokenSource snapshotCancel = new(TimeSpan.FromMinutes(5));
+                SaveSnapshot.Result snapshot = await new SaveSnapshot(snapshotOptions)
+                    .CaptureAsync(snapshotOptions.AuthToken, snapshotCancel.Token)
+                    .ConfigureAwait(false);
+                Console.WriteLine(snapshot.Ok ? "SNAPSHOT_OK" : "SNAPSHOT_FAILED");
+                Console.WriteLine(snapshot.Reason);
+                if (snapshot.Ok) Console.WriteLine($"path={snapshot.Path} bytes={snapshot.Bytes}");
+                return snapshot.Ok ? 0 : 3;
+            }
+
             string configPath = ParseConfigPath(args);
             HostOptions options = HostOptions.Load(configPath);
             using CancellationTokenSource shutdown = new();
@@ -58,7 +74,8 @@ internal static class Program
     {
         if (args.Length != 2 || !args[0].Equals("--config", StringComparison.OrdinalIgnoreCase))
         {
-            throw new ArgumentException("Usage: DriftwoodServer --config <appsettings.json> | --verify-build <appsettings.json>");
+            throw new ArgumentException(
+                "Usage: DriftwoodServer --config <appsettings.json> | --verify-build <appsettings.json> | --snapshot <appsettings.json>");
         }
         return Path.GetFullPath(args[1]);
     }

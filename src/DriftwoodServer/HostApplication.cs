@@ -168,6 +168,27 @@ internal sealed class HostApplication
             {
                 try { await game.DisposeAsync().ConfigureAwait(false); }
                 catch (Exception exception) { Console.Error.WriteLine($"Game shutdown failed: {exception.Message}"); }
+
+                // Save-then-snapshot, in that order and AFTER the process is down, so the archive
+                // contains the flush rather than the file the flush replaced. A forced kill skips
+                // the game's own quit-time save entirely, which is exactly when a stale snapshot
+                // would be most damaging.
+                if (!string.IsNullOrWhiteSpace(_options.BackupRoot))
+                {
+                    try
+                    {
+                        using CancellationTokenSource snapshotCancel = new(TimeSpan.FromMinutes(3));
+                        SaveSnapshot.Result snapshot = await new SaveSnapshot(_options)
+                            .CaptureAsync(_options.AuthToken, snapshotCancel.Token).ConfigureAwait(false);
+                        Console.WriteLine(snapshot.Ok
+                            ? $"SHUTDOWN_SNAPSHOT_OK {snapshot.Path} ({snapshot.Bytes} bytes)"
+                            : $"SHUTDOWN_SNAPSHOT_FAILED {snapshot.Reason}");
+                    }
+                    catch (Exception exception)
+                    {
+                        Console.Error.WriteLine($"Shutdown snapshot failed: {exception.Message}");
+                    }
+                }
             }
             childJob?.Dispose();
             background.Cancel();

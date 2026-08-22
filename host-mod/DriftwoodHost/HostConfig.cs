@@ -55,6 +55,16 @@ namespace DriftwoodHost
 		public bool SuppressGhostHost = true;
 		public int TargetFrameRate;
 
+		// Fault injection, defaulted off. Playbook 1d requirement 2 ends with "test this by breaking
+		// it on purpose - a gate you have never seen fail is not a gate", and the gate in question
+		// is the one that decides whether a server refuses to host. This makes that testable and
+		// repeatable instead of a thing somebody once tried by hand.
+		//
+		// It can only ever push the server FURTHER towards refusing, never towards hosting, so a
+		// stray value fails in the safe direction. Every use is logged loudly and published in the
+		// readiness file.
+		public string SimulateMissingPatch = string.Empty;
+
 		public string StateDirectory = string.Empty;
 		// The gameserver instance root. Logs\ under it is OUTSIDE the customer's FTP jail, which
 		// is why the boot markers live there and not in Saves\.
@@ -88,6 +98,7 @@ namespace DriftwoodHost
 			config.SuppressGhostHost = config.Bool(config.SuppressGhostHost, "SuppressGhostHost", "HideHostPlayer");
 			config.TargetFrameRate = config.Int(config.TargetFrameRate, "TargetFrameRate", "FrameRate", "Fps");
 
+			config.SimulateMissingPatch = config.String(config.SimulateMissingPatch, "SimulateMissingPatch");
 			config.StateDirectory = config.String(config.StateDirectory, "StateDirectory", "StateRoot");
 			config.InstanceRoot = config.String(config.InstanceRoot, "InstanceRoot", "ServerRoot", "GameServerRoot");
 
