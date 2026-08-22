@@ -126,14 +126,39 @@ namespace DriftwoodHost
 
 		private void AcceptLoop()
 		{
+			int consecutiveFailures = 0;
 			while (_running)
 			{
 				TcpClient client;
-				try { client = _listener.AcceptTcpClient(); }
+				try
+				{
+					client = _listener.AcceptTcpClient();
+					consecutiveFailures = 0;
+				}
 				catch (Exception)
 				{
 					if (!_running) return;
+					// A listener whose socket has died throws on every accept, and a loop that
+					// only sleeps and retries spins forever against it. The panel decides whether
+					// this server is up by asking this endpoint, so a permanently dead status
+					// port is a running server the panel reports as down and restarts - which is
+					// the failure mode the refuse-on-bind-failure path at boot exists to prevent,
+					// arriving later by a different road. Rebind rather than spin.
 					Thread.Sleep(250);
+					if (++consecutiveFailures < 8) continue;
+					consecutiveFailures = 0;
+					try
+					{
+						_listener.Stop();
+						_listener = new TcpListener(IPAddress.Any, _port);
+						_listener.Start();
+						Plugin.Log?.LogWarning("The status API listener stopped accepting and has been rebound on port " + _port + ".");
+					}
+					catch (Exception exception)
+					{
+						Plugin.Log?.LogError("The status API listener could not be rebound on port " + _port + ": " + exception.Message);
+						Thread.Sleep(5000);
+					}
 					continue;
 				}
 
