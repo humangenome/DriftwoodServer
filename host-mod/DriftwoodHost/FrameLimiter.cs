@@ -30,6 +30,7 @@ namespace DriftwoodHost
 		private int _targetFrameRate;
 		private int _idleFrameRate;
 		private bool _idling;
+		private double _frozenWithPlayerSince;
 
 		internal static double MeasuredSleepMs { get; private set; }
 		// True while the loop is running at the reduced empty-server rate.
@@ -105,10 +106,29 @@ namespace DriftwoodHost
 				try { connected = InstanceFinder.ServerManager?.Clients?.Count ?? 0; } catch { connected = 0; }
 				if (connected > 1)
 				{
+					// This runs every frame; the readiness sampler that normally releases the pause
+					// runs every two seconds. So on a NORMAL join this fires first, and saying
+					// "something failed" every single time would train everyone to ignore the one
+					// case that matters. Resume immediately either way, but only WARN once the
+					// clock has been stopped with a player on it for longer than the sampler's own
+					// interval - which is the only version of this that means something is wrong.
+					if (_frozenWithPlayerSince <= 0.0) _frozenWithPlayerSince = Time.realtimeSinceStartupAsDouble;
+					bool overdue = Time.realtimeSinceStartupAsDouble - _frozenWithPlayerSince > 3.0;
 					Time.timeScale = 1f;
 					EmptyWorldPause.ForceResume();
-					Plugin.Log?.LogWarning("The world clock was stopped while a player was connected. Restored it. Something that should have resumed the world did not.");
+					if (overdue)
+					{
+						Plugin.Log?.LogWarning("The world clock stayed stopped for over three seconds with a player connected. Restored it. Something that should have resumed the world did not.");
+					}
 				}
+				else
+				{
+					_frozenWithPlayerSince = 0.0;
+				}
+			}
+			else
+			{
+				_frozenWithPlayerSince = 0.0;
 			}
 
 			int target = CurrentTarget();
