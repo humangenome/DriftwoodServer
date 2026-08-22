@@ -10,6 +10,7 @@ product's wire format that is only accidentally the same.
 | [`readiness.md`](readiness.md) | the host mod (inside the game) and the supervisor / panel |
 | [`http-api.md`](http-api.md) | the host mod and the panel's query companion |
 | [`boot-markers.md`](boot-markers.md) | the host mod and the panel's health check |
+| [`config.md`](config.md) | the panel/supervisor (writer) and the host mod (reader) |
 
 Keep each of these in lockstep with its source. `HostHttpApi.cs`, `Readiness.cs` and
 `BootMarkers.cs` reference these files by path in comments for exactly that reason.

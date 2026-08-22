@@ -21,6 +21,10 @@ internal sealed class HostOptions
     public string BackupRoot { get; set; } = string.Empty;
     // Steam's steamapps folder for this install, so the build pin can read appmanifest_<appid>.acf.
     public string SteamAppsDirectory { get; set; } = string.Empty;
+    // The INSTANCE root: the parent of GameRoot. The install nests as
+    // <instance root>\How to Fish\How to Fish.exe. Saves, Logs\ and the boot markers live here,
+    // deliberately outside the game dir so a SteamCMD validate cannot own or delete them.
+    public string InstanceRoot { get; set; } = string.Empty;
 
     public string GameExecutable { get; set; } = "How to Fish.exe";
     public string WorldName { get; set; } = "Driftwood";
@@ -64,6 +68,9 @@ internal sealed class HostOptions
             options.BackupRoot = Resolve(baseDirectory, options.BackupRoot, nameof(BackupRoot));
         if (!string.IsNullOrWhiteSpace(options.SteamAppsDirectory))
             options.SteamAppsDirectory = Resolve(baseDirectory, options.SteamAppsDirectory, nameof(SteamAppsDirectory));
+        options.InstanceRoot = string.IsNullOrWhiteSpace(options.InstanceRoot)
+            ? Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(options.GameRoot)) ?? options.GameRoot
+            : Resolve(baseDirectory, options.InstanceRoot, nameof(InstanceRoot));
         options.Validate();
         return options;
     }

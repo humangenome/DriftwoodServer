@@ -32,10 +32,17 @@ internal static class PluginConfigWriter
         text.AppendLine("StartDelaySeconds = 10");
         text.AppendLine(Line("WorldReadyTimeoutSeconds", options.WorldReadyTimeoutSeconds));
         text.AppendLine($"ServerName = {Sanitise(options.ServerName)}");
+        text.AppendLine($"SaveRoot = {options.SaveRoot}");
+        text.AppendLine();
+        // The API token lives under [Http] and is NOT the join password. They are different
+        // secrets in different sections, and a reader that flattens sections turns "[Http] Password"
+        // into the join password - leaving the token empty and rejecting every authenticated call.
+        text.AppendLine("[Http]");
+        text.AppendLine(Line("Port", options.HttpPort > 0 ? options.HttpPort : options.GamePort + 1));
+        text.AppendLine($"Password = {Sanitise(options.AuthToken)}");
         text.AppendLine();
         text.AppendLine("[World]");
-        text.AppendLine($"WorldName = {Sanitise(options.WorldName)}");
-        text.AppendLine($"SaveDirectory = {options.SaveRoot}");
+        text.AppendLine($"Name = {Sanitise(options.WorldName)}");
         text.AppendLine(Line("AutoSaveMinutes", options.AutoSaveMinutes));
         text.AppendLine();
         text.AppendLine("[Gameplay]");
@@ -50,6 +57,10 @@ internal static class PluginConfigWriter
         text.AppendLine();
         text.AppendLine("[Paths]");
         text.AppendLine($"StateDirectory = {options.StateRoot}");
+        // The INSTANCE root, not the game dir. The install nests as
+        // <instance root>\How to Fish\How to Fish.exe, and Logs\ plus the boot markers live under
+        // the instance root - outside the game dir, so a SteamCMD validate cannot own them.
+        text.AppendLine($"InstanceRoot = {options.InstanceRoot}");
 
         AtomicFile.WriteText(options.PluginConfigPath, text.ToString());
     }

@@ -58,6 +58,9 @@ namespace DriftwoodHost
 		public int Players;
 		public string WorldName = string.Empty;
 		public string SaveDirectory = string.Empty;
+		public string GameDir = string.Empty;
+		public string InstanceRoot = string.Empty;
+		public string LogsDirectory = string.Empty;
 		public string GameVersion = string.Empty;
 		public string PluginVersion = string.Empty;
 		public string EffectiveBindAddress = string.Empty;
@@ -144,6 +147,9 @@ namespace DriftwoodHost
 					.Add("players", WorldRunning ? Players : -1)
 					.Add("worldName", WorldName)
 					.Add("saveDirectory", SaveDirectory)
+					.Add("gameDir", GameDir)
+					.Add("instanceRoot", InstanceRoot)
+					.Add("logsDirectory", LogsDirectory)
 					.Add("ghostHostSuppressed", GhostHostSuppressed)
 					.Add("bootAssertionsPassed", BootAssertionsPassed)
 					.AddStrings("roster", _roster)

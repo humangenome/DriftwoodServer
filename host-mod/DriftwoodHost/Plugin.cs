@@ -67,8 +67,12 @@ namespace DriftwoodHost
 			// panel writes under a different section or a near-miss name still lands, and any key
 			// that matched NOTHING is reported instead of silently ignored.
 			_config = HostConfig.Load(Path.Combine(Paths.ConfigPath, Guid + ".cfg"));
-			string gameRoot = Path.GetDirectoryName(Paths.GameRootPath ?? Paths.BepInExRootPath) ?? Paths.BepInExRootPath;
-			BootMarkers.Prepare(_config.ResolveLogsDirectory(Paths.GameRootPath ?? gameRoot));
+			// gameDir is where the executable lives. instanceRoot is its PARENT, because the install
+			// nests as <instance root>\How to Fish\How to Fish.exe. Saves, Logs\ and the boot
+			// markers all live under the instance root, outside anything SteamCMD owns.
+			string gameDir = Paths.GameRootPath ?? Paths.BepInExRootPath;
+			string instanceRoot = _config.ResolveInstanceRoot(gameDir);
+			BootMarkers.Prepare(_config.ResolveLogsDirectory(gameDir));
 			string stateDirectory = _config.ResolveStateDirectory(
 				Path.Combine(Paths.ConfigPath, "driftwood-state"));
 			_readiness = new Readiness(stateDirectory)
@@ -77,6 +81,9 @@ namespace DriftwoodHost
 				GameVersion = Application.version
 			};
 			_readiness.UnrecognisedConfigKeys = _config.UnrecognisedKeys;
+			_readiness.GameDir = gameDir;
+			_readiness.InstanceRoot = instanceRoot;
+			_readiness.LogsDirectory = BootMarkers.LogsDirectory;
 			_stopFilePath = Path.Combine(stateDirectory, "stop.requested");
 			TryDelete(_stopFilePath);
 
@@ -174,6 +181,20 @@ namespace DriftwoodHost
 				}
 				Logger.LogWarning("FAULT INJECTION IS ON. These patch targets are being treated as missing: " +
 					string.Join(", ", PatchPlan.SimulatedMissing) + ". Never leave this set on a customer server.");
+			}
+
+			// The declared required set and the plan must agree. If a target is renamed or demoted,
+			// this refuses rather than letting a server come up without a guard the rest of the
+			// system assumes is in force.
+			foreach (string requiredId in SteamGuards.RequiredGuardIds)
+			{
+				bool present = targets.Exists(t =>
+					string.Equals(t.Id, requiredId, StringComparison.OrdinalIgnoreCase) &&
+					t.Necessity == PatchNecessity.Required);
+				if (present) continue;
+				Refuse("This server will not host because " + requiredId +
+					" is not registered as a required guard. Without it the player-spawn path throws and no player can ever appear, while the port stays open.");
+				return;
 			}
 
 			Harmony harmony = new Harmony(Guid);

@@ -21,6 +21,26 @@ namespace DriftwoodHost
 	// the surface that does NOT move when the game rebuilds (playbook 1c).
 	internal static class SteamGuards
 	{
+		// THE REQUIRED SET. A server that cannot resolve and install every one of these refuses to
+		// host, because each one aborts FishNet's shared spawn loop when it throws - taking every
+		// object queued behind it with it, silently, while the socket stays up.
+		//
+		//   GetPersonaName / GetFriendPersonaName : Player.InitializePlayer, on the join path.
+		//                                           Without them no player can ever appear.
+		//   GetSteamID                            : Client.SendSpawnPlayer, and SaveManager keys
+		//                                           every per-player save on the result - so an
+		//                                           unguarded call breaks progression as well as
+		//                                           spawning.
+		//
+		// Kept as a named list so a cross-repo contract audit can read it out of this file, and so
+		// nothing can quietly demote a member to Optional.
+		internal static readonly string[] RequiredGuardIds =
+		{
+			"Steamworks.SteamFriends.GetPersonaName",
+			"Steamworks.SteamFriends.GetFriendPersonaName",
+			"Steamworks.SteamUser.GetSteamID"
+		};
+
 		public static IEnumerable<PatchTarget> Targets()
 		{
 			// --- identity -----------------------------------------------------------------

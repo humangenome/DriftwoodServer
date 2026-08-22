@@ -13,15 +13,8 @@ public class HostConfigTests : IDisposable
         return HostConfig.Load(_path);
     }
 
-    private const string Minimal = """
-[Server]
-Port = 22003
-MaxPlayers = 4
-SaveRoot = C:\srv\Saves
-
-[World]
-WorldName = Driftwood
-""";
+    private const string Minimal =
+        "[Server]\nPort = 22003\nMaxPlayers = 4\nSaveRoot = C:\\srv\\Saves\n\n[World]\nWorldName = Driftwood\n";
 
     [Fact]
     public void ReadsTheKeysThePanelWrites()
@@ -40,14 +33,8 @@ WorldName = Driftwood
         // The two lanes disagreed about Slots vs MaxPlayers and SaveDirectory vs SaveRoot. A
         // disagreement here means the panel writes a slot limit the mod never sees, and both
         // halves look healthy.
-        HostConfig config = Load("""
-[Server]
-GamePort = 22013
-Slots = 6
-SaveDirectory = C:\srv\Saves
-world_name = Elsewhere
-Fps = 30
-""");
+        HostConfig config = Load(
+            "[Server]\nGamePort = 22013\nSlots = 6\nSaveDirectory = C:\\srv\\Saves\nworld_name = Elsewhere\nFps = 30\n");
         Assert.Equal(22013, config.Port);
         Assert.Equal(6, config.MaxPlayers);
         Assert.Equal(30, config.TargetFrameRate);
@@ -56,18 +43,10 @@ Fps = 30
     }
 
     [Fact]
-    public void SectionsDoNotChangeWhereAValueLands()
-    {
-        // TargetFrameRate has lived under [Server] and under [Performance] in different drafts.
-        HostConfig config = Load(Minimal + "\n[Performance]\nTargetFrameRate = 45\n");
-        Assert.Equal(45, config.TargetFrameRate);
-    }
-
-    [Fact]
     public void AKeyNobodyReadsIsReportedRatherThanIgnored()
     {
-        HostConfig config = Load(Minimal + "\nMaxPlayerz = 12\n");
-        Assert.Contains("MaxPlayerz", config.UnrecognisedKeys);
+        HostConfig config = Load(Minimal + "MaxPlayerz = 12\n");
+        Assert.Contains(config.UnrecognisedKeys, k => k.EndsWith("MaxPlayerz", StringComparison.Ordinal));
         // ...and the real setting is untouched, so the typo cannot silently become the answer.
         Assert.Equal(4, config.MaxPlayers);
     }
@@ -102,7 +81,7 @@ Fps = 30
     [Fact]
     public void AStatusPortCollidingWithTheGamePortIsARefusal()
     {
-        HostConfig config = Load(Minimal + "\nHttpPort = 22003\n");
+        HostConfig config = Load(Minimal + "\n[Http]\nPort = 22003\n");
         Assert.NotNull(config.Validate());
     }
 
@@ -118,7 +97,7 @@ Fps = 30
     [Fact]
     public void AnOutOfRangePhysicsStepIsARefusal()
     {
-        HostConfig config = Load(Minimal + "\nPhysicsStepSeconds = 0.5\n");
+        HostConfig config = Load(Minimal + "\n[Performance]\nPhysicsStepSeconds = 0.5\n");
         string? reason = config.Validate();
         Assert.NotNull(reason);
         Assert.Contains("tunnel", reason, StringComparison.OrdinalIgnoreCase);
@@ -131,6 +110,78 @@ Fps = 30
         Assert.Equal(0f, config.PhysicsStepSeconds);
         Assert.Equal(0, config.NetworkTickRate);
         Assert.Null(config.Validate());
+    }
+
+    // --- the three breaks a cross-repo contract test caught, each now pinned -------------------
+
+    [Fact]
+    public void TheHttpPasswordIsTheApiTokenAndNotTheJoinPassword()
+    {
+        // The break: "Password" was an alias of JoinPassword and sections were ignored, so
+        // "[Http] Password" landed on the join password and the API token was always empty -
+        // rejecting every authenticated call to the surface the panel depends on.
+        HostConfig config = Load(
+            "[Server]\nPort = 22003\nSaveRoot = C:\\srv\\Saves\nPassword = joinsecret\n\n[Http]\nPassword = apitoken\n\n[World]\nName = Driftwood\n");
+        Assert.Equal("apitoken", config.AuthToken);
+        Assert.Equal("joinsecret", config.JoinPassword);
+    }
+
+    [Fact]
+    public void PortsInDifferentSectionsDoNotCollapse()
+    {
+        // The break: Port appears under [Server] and [Http], and a flat reader took whichever came
+        // first - so the game port and the status port silently became the same value.
+        HostConfig config = Load(
+            "[Server]\nPort = 22003\nSaveRoot = C:\\srv\\Saves\n\n[Http]\nPort = 22004\n\n[World]\nName = Driftwood\n");
+        Assert.Equal(22003, config.Port);
+        Assert.Equal(22004, config.EffectiveHttpPort);
+        Assert.Null(config.Validate());
+    }
+
+    [Fact]
+    public void WorldNameIsReadFromTheSectionedFormThePanelWrites()
+    {
+        // The break: "[World] Name" was never read at all.
+        HostConfig config = Load("[Server]\nPort = 22003\nSaveRoot = C:\\srv\\Saves\n\n[World]\nName = Archipelago\n");
+        Assert.Equal("Archipelago", config.WorldName);
+    }
+
+    [Fact]
+    public void BindAddressInAnotherSectionDoesNotOverrideTheServersOwn()
+    {
+        HostConfig config = Load(
+            "[Server]\nPort = 22003\nBindAddress = 0.0.0.0\nSaveRoot = C:\\srv\\Saves\n\n[Http]\nBindAddress = 127.0.0.1\n\n[World]\nName = Driftwood\n");
+        Assert.Equal("0.0.0.0", config.BindAddress);
+    }
+
+    [Fact]
+    public void InstanceRootIsReadAndTheGameDirIsItsChild()
+    {
+        // The install nests: <instance root>\How to Fish\How to Fish.exe. Saves and the boot
+        // markers live under the instance root, OUTSIDE the game dir, so a SteamCMD validate
+        // cannot own them.
+        HostConfig config = Load(
+            "[Server]\nPort = 22003\nSaveRoot = C:\\ss\\941353\\Saves\n\n[World]\nName = Driftwood\n\n[Paths]\nInstanceRoot = C:\\ss\\941353\n");
+        Assert.Equal("C:\\ss\\941353", config.InstanceRoot);
+        Assert.Equal(Path.Combine("C:\\ss\\941353", "Logs"), config.ResolveLogsDirectory("C:\\ss\\941353\\How to Fish"));
+    }
+
+    [Fact]
+    public void WithoutAnInstanceRootTheParentOfTheGameDirIsUsed()
+    {
+        // Without this the mod cannot locate Logs\, never writes the markers the panel asserts on,
+        // and every server reports Stopped.
+        HostConfig config = Load(Minimal);
+        Assert.Equal("/srv/941353", config.ResolveInstanceRoot("/srv/941353/How to Fish"));
+        Assert.Equal(Path.Combine("/srv/941353", "Logs"), config.ResolveLogsDirectory("/srv/941353/How to Fish"));
+    }
+
+    [Fact]
+    public void ABareKeyStillWorksButNeverOutranksASectionedOne()
+    {
+        HostConfig config = Load(
+            "MaxPlayers = 3\n\n[Server]\nPort = 22003\nSaveRoot = C:\\srv\\Saves\nMaxPlayers = 6\n\n[World]\nName = Driftwood\n");
+        Assert.Equal(6, config.MaxPlayers);
     }
 
     public void Dispose()

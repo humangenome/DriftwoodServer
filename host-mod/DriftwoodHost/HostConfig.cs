@@ -20,8 +20,12 @@ namespace DriftwoodHost
 	//      the panel assert what the server is ACTUALLY running rather than what they wrote.
 	internal sealed class HostConfig
 	{
+		// Section-qualified ("Server.Port"). Authoritative.
 		private readonly Dictionary<string, string> _values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+		// Bare keys, used only when no qualified name matched.
+		private readonly Dictionary<string, string> _flat = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 		private readonly HashSet<string> _consumed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+		private readonly HashSet<string> _consumedFlat = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
 		public string SourcePath { get; private set; } = string.Empty;
 		public bool Loaded { get; private set; }
@@ -88,39 +92,81 @@ namespace DriftwoodHost
 			HostConfig config = new HostConfig { SourcePath = path };
 			config.ReadFile(path);
 
-			config.Enabled = config.Bool(config.Enabled, "Enabled", "AutoStart");
-			config.BindAddress = config.String(config.BindAddress, "BindAddress", "ServerBindAddress", "ListenAddress");
-			config.Port = config.Int(config.Port, "Port", "GamePort", "ServerPort");
-			config.HttpPort = config.Int(config.HttpPort, "HttpPort", "AdminPort", "ApiPort");
-			config.MaxPlayers = config.Int(config.MaxPlayers, "MaxPlayers", "Slots", "MaxClients");
-			config.StartDelaySeconds = config.Float(config.StartDelaySeconds, "StartDelaySeconds", "StartDelay");
-			config.WorldReadyTimeoutSeconds = config.Float(config.WorldReadyTimeoutSeconds, "WorldReadyTimeoutSeconds", "WorldTimeoutSeconds");
-			config.ServerName = config.String(config.ServerName, "ServerName", "HostName");
-			config.JoinPassword = config.String(config.JoinPassword, "JoinPassword", "Password");
-			config.AuthToken = config.String(config.AuthToken, "AuthToken", "AdminToken", "PassRcon", "RconPassword");
+			// SECTION-QUALIFIED NAMES COME FIRST in every list below, bare names last. Where the
+			// same bare key legitimately exists in two sections - Port, BindAddress, Password -
+			// only the qualified form is trustworthy, and getting that wrong meant an empty API
+			// token and a silently rejected authenticated call on every request.
+			config.Enabled = config.Bool(config.Enabled, "Server.Enabled", "Enabled", "AutoStart");
+			config.BindAddress = config.String(config.BindAddress,
+				"Server.BindAddress", "BindAddress", "ServerBindAddress", "ListenAddress");
+			config.Port = config.Int(config.Port,
+				"Server.Port", "Server.GamePort", "GamePort", "ServerPort", "Port");
+			config.HttpPort = config.Int(config.HttpPort,
+				"Http.Port", "Http.HttpPort", "Server.HttpPort", "HttpPort", "AdminPort", "ApiPort");
+			config.MaxPlayers = config.Int(config.MaxPlayers,
+				"Server.MaxPlayers", "Server.Slots", "MaxPlayers", "Slots", "MaxClients");
+			config.StartDelaySeconds = config.Float(config.StartDelaySeconds,
+				"Server.StartDelaySeconds", "StartDelaySeconds", "StartDelay");
+			config.WorldReadyTimeoutSeconds = config.Float(config.WorldReadyTimeoutSeconds,
+				"Server.WorldReadyTimeoutSeconds", "WorldReadyTimeoutSeconds", "WorldTimeoutSeconds");
+			config.ServerName = config.String(config.ServerName,
+				"Server.ServerName", "Server.Name", "ServerName", "HostName");
+			// The JOIN password. Distinct from the API token below - they are different secrets and
+			// they live in different sections.
+			config.JoinPassword = config.String(config.JoinPassword,
+				"Server.JoinPassword", "Server.Password", "JoinPassword");
+			// The API token for every mutating HTTP route. "[Http] Password" is its canonical
+			// spelling on the writing side.
+			config.AuthToken = config.String(config.AuthToken,
+				"Http.Password", "Http.AuthToken", "Http.Token", "Server.AuthToken",
+				"AuthToken", "AdminToken", "PassRcon", "RconPassword");
 
-			config.WorldName = config.String(config.WorldName, "WorldName", "world_name", "SaveName");
-			config.SaveRoot = config.String(config.SaveRoot, "SaveRoot", "SaveDirectory", "SavePath");
-			config.AutoSaveMinutes = config.Float(config.AutoSaveMinutes, "AutoSaveMinutes", "auto_save_minutes");
-			config.FriendlyFire = config.Bool(config.FriendlyFire, "FriendlyFire", "friendly_fire");
-			config.OneShotKills = config.Bool(config.OneShotKills, "OneShotKills", "OneShot", "one_shot");
+			config.WorldName = config.String(config.WorldName,
+				"World.Name", "World.WorldName", "Server.WorldName", "WorldName", "world_name", "SaveName");
+			config.SaveRoot = config.String(config.SaveRoot,
+				"Server.SaveRoot", "Paths.SaveRoot", "World.SaveRoot", "SaveRoot", "SaveDirectory", "SavePath");
+			config.AutoSaveMinutes = config.Float(config.AutoSaveMinutes,
+				"World.AutoSaveMinutes", "Server.AutoSaveMinutes", "AutoSaveMinutes", "auto_save_minutes");
+			config.FriendlyFire = config.Bool(config.FriendlyFire,
+				"Gameplay.FriendlyFire", "World.FriendlyFire", "FriendlyFire", "friendly_fire");
+			config.OneShotKills = config.Bool(config.OneShotKills,
+				"Gameplay.OneShotKills", "Gameplay.OneShot", "OneShotKills", "OneShot", "one_shot");
 
-			config.MuteAudio = config.Bool(config.MuteAudio, "MuteAudio", "Mute");
-			config.HostMode = config.Bool(config.HostMode, "HostMode");
-			config.CountHostPlayer = config.Bool(config.CountHostPlayer, "CountHostPlayer");
-			config.SuppressGhostHost = config.Bool(config.SuppressGhostHost, "SuppressGhostHost", "HideHostPlayer");
-			config.TargetFrameRate = config.Int(config.TargetFrameRate, "TargetFrameRate", "FrameRate", "Fps");
-			config.PauseWorldWhenEmpty = config.Bool(config.PauseWorldWhenEmpty, "PauseWorldWhenEmpty", "FreezeWhenEmpty");
-			config.PhysicsStepSeconds = config.Float(config.PhysicsStepSeconds, "PhysicsStepSeconds", "FixedDeltaTime");
-			config.NetworkTickRate = config.Int(config.NetworkTickRate, "NetworkTickRate", "TickRate");
+			config.MuteAudio = config.Bool(config.MuteAudio, "Server.MuteAudio", "MuteAudio", "Mute");
+			config.HostMode = config.Bool(config.HostMode, "Server.HostMode", "HostMode");
+			config.CountHostPlayer = config.Bool(config.CountHostPlayer,
+				"Server.CountHostPlayer", "CountHostPlayer");
+			config.SuppressGhostHost = config.Bool(config.SuppressGhostHost,
+				"Host.SuppressGhostHost", "Server.SuppressGhostHost", "SuppressGhostHost", "HideHostPlayer");
+			config.TargetFrameRate = config.Int(config.TargetFrameRate,
+				"Server.TargetFrameRate", "Performance.TargetFrameRate", "TargetFrameRate", "FrameRate", "Fps");
+			config.PauseWorldWhenEmpty = config.Bool(config.PauseWorldWhenEmpty,
+				"Performance.PauseWorldWhenEmpty", "Server.PauseWorldWhenEmpty", "PauseWorldWhenEmpty", "FreezeWhenEmpty");
+			config.PhysicsStepSeconds = config.Float(config.PhysicsStepSeconds,
+				"Performance.PhysicsStepSeconds", "Server.PhysicsStepSeconds", "PhysicsStepSeconds", "FixedDeltaTime");
+			config.NetworkTickRate = config.Int(config.NetworkTickRate,
+				"Performance.NetworkTickRate", "Server.NetworkTickRate", "NetworkTickRate", "TickRate");
 
-			config.SimulateMissingPatch = config.String(config.SimulateMissingPatch, "SimulateMissingPatch");
-			config.StateDirectory = config.String(config.StateDirectory, "StateDirectory", "StateRoot");
-			config.InstanceRoot = config.String(config.InstanceRoot, "InstanceRoot", "ServerRoot", "GameServerRoot");
+			config.SimulateMissingPatch = config.String(config.SimulateMissingPatch,
+				"Diagnostics.SimulateMissingPatch", "SimulateMissingPatch");
+			config.StateDirectory = config.String(config.StateDirectory,
+				"Paths.StateDirectory", "Paths.StateRoot", "Server.StateDirectory", "StateDirectory", "StateRoot");
+			// THE INSTANCE ROOT, not the game directory. The install nests: the executable lives at
+			// <instance root>\How to Fish\How to Fish.exe, so the game dir is a CHILD of the
+			// instance root. Saves and the boot markers live under the instance root, OUTSIDE the
+			// game dir, deliberately - so a SteamCMD validate cannot own or delete them.
+			config.InstanceRoot = config.String(config.InstanceRoot,
+				"Paths.InstanceRoot", "Server.InstanceRoot", "InstanceRoot", "ServerRoot", "GameServerRoot", "InstanceDir");
 
-			foreach (string key in config._values.Keys)
+			foreach (string qualified in config._values.Keys)
 			{
-				if (!config._consumed.Contains(key)) config.UnrecognisedKeys.Add(key);
+				if (config._consumed.Contains(qualified)) continue;
+				int dot = qualified.IndexOf('.');
+				string bare = dot >= 0 ? qualified.Substring(dot + 1) : qualified;
+				// A key is only "unrecognised" if neither its qualified nor its bare form was asked
+				// for by any setting.
+				if (config._consumedFlat.Contains(bare)) continue;
+				config.UnrecognisedKeys.Add(qualified);
 			}
 			return config;
 		}
@@ -129,32 +175,68 @@ namespace DriftwoodHost
 		{
 			if (!File.Exists(path)) return;
 			Loaded = true;
+			string section = string.Empty;
 			foreach (string raw in File.ReadAllLines(path))
 			{
 				string line = raw.Trim();
-				if (line.Length == 0 || line[0] == '#' || line[0] == ';' || line[0] == '[') continue;
+				if (line.Length == 0 || line[0] == '#' || line[0] == ';') continue;
+				if (line[0] == '[')
+				{
+					int close = line.IndexOf(']');
+					section = close > 1 ? line.Substring(1, close - 1).Trim() : string.Empty;
+					continue;
+				}
 				int equals = line.IndexOf('=');
 				if (equals <= 0) continue;
 				string key = line.Substring(0, equals).Trim();
 				string value = line.Substring(equals + 1).Trim();
-				// Section is deliberately ignored: the two lanes have moved keys between [Server],
-				// [World] and [Performance], and a value in the "wrong" section is still the
-				// operator's clear intent. A duplicate key across sections is reported below.
-				if (_values.ContainsKey(key)) continue;
-				_values[key] = value;
+
+				// SECTIONS ARE AUTHORITATIVE. An earlier version of this reader ignored them, which
+				// looked tolerant and was actually a structural disagreement with the side that
+				// WRITES the file: "[Http] Password" collapsed onto "[Server] Password", so the API
+				// token was always empty and every authenticated call was rejected; and Port and
+				// BindAddress, which legitimately appear under more than one section, silently
+				// collapsed into whichever came first.
+				string qualified = section.Length > 0 ? section + "." + key : key;
+				if (!_values.ContainsKey(qualified)) _values[qualified] = value;
+
+				// A bare key is still accepted as a LAST RESORT, so a value written without a
+				// section is not lost - but it can never outrank a sectioned match, because
+				// Resolve() asks for the qualified names first.
+				if (!_flat.ContainsKey(key)) _flat[key] = value;
 			}
 		}
 
+		// Qualified names first, in the order given, then bare names. A bare key can never outrank
+		// a sectioned one.
 		private string Raw(params string[] names)
 		{
 			foreach (string name in names)
 			{
-				if (!_values.TryGetValue(name, out string value)) continue;
-				_consumed.Add(name);
-				return value;
+				if (name.IndexOf('.') < 0) continue;
+				if (!_values.TryGetValue(name, out string qualifiedValue)) continue;
+				MarkConsumed(names);
+				return qualifiedValue;
 			}
-			foreach (string name in names) _consumed.Add(name);
+			foreach (string name in names)
+			{
+				if (name.IndexOf('.') >= 0) continue;
+				if (!_flat.TryGetValue(name, out string flatValue)) continue;
+				MarkConsumed(names);
+				return flatValue;
+			}
+			MarkConsumed(names);
 			return null;
+		}
+
+		private void MarkConsumed(string[] names)
+		{
+			foreach (string name in names)
+			{
+				_consumed.Add(name);
+				int dot = name.IndexOf('.');
+				_consumedFlat.Add(dot >= 0 ? name.Substring(dot + 1) : name);
+			}
 		}
 
 		private string String(string fallback, params string[] names)
@@ -208,14 +290,32 @@ namespace DriftwoodHost
 		public string ResolveStateDirectory(string fallback) =>
 			string.IsNullOrWhiteSpace(StateDirectory) ? fallback : StateDirectory.Trim();
 
-		// Logs\ under the instance root - outside the customer's FTP jail, so a marker there
-		// cannot be forged or deleted by the customer.
-		public string ResolveLogsDirectory(string gameRoot)
+		// THE INSTANCE ROOT vs THE GAME DIR - two different directories, and conflating them is the
+		// real bug behind a whole family of path defects (the remote lane found 31 parameters named
+		// $gameRoot that actually held the instance root).
+		//
+		//   instance root : <...>\\<dirid>            <- saves, Logs\\, boot markers, host state
+		//   game dir      : <...>\\<dirid>\\How to Fish   <- the executable and everything SteamCMD owns
+		//
+		// The install NESTS: the exe is at <instance root>\\How to Fish\\How to Fish.exe. Saves and
+		// markers live under the instance root, OUTSIDE the game dir, deliberately - a SteamCMD
+		// validate must never be able to own or delete them.
+		public string ResolveInstanceRoot(string gameDir)
 		{
-			string root = string.IsNullOrWhiteSpace(InstanceRoot)
-				? Path.GetDirectoryName(Path.GetFullPath(gameRoot.TrimEnd('/', '\\')))
-				: InstanceRoot.Trim();
-			return string.IsNullOrEmpty(root) ? Path.Combine(gameRoot, "Logs") : Path.Combine(root, "Logs");
+			string configured = (InstanceRoot ?? string.Empty).Trim();
+			if (configured.Length > 0) return configured.TrimEnd('/', '\\');
+			if (string.IsNullOrEmpty(gameDir)) return string.Empty;
+			string parent = Path.GetDirectoryName(Path.GetFullPath(gameDir.TrimEnd('/', '\\')));
+			return string.IsNullOrEmpty(parent) ? gameDir : parent;
+		}
+
+		// Logs\\ under the instance root - outside the customer's FTP jail, so a marker there
+		// cannot be forged or deleted by the customer, and outside the game dir, so SteamCMD
+		// cannot take it.
+		public string ResolveLogsDirectory(string gameDir)
+		{
+			string root = ResolveInstanceRoot(gameDir);
+			return string.IsNullOrEmpty(root) ? Path.Combine(gameDir, "Logs") : Path.Combine(root, "Logs");
 		}
 
 		// Returns null when valid, otherwise one plain sentence naming the problem.
