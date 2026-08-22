@@ -40,6 +40,22 @@ namespace DriftwoodHost
 
 		private void Awake()
 		{
+			try
+			{
+				Boot();
+			}
+			catch (Exception exception)
+			{
+				// Anything unexpected in boot is still a refusal with a readable sentence, not a
+				// stack trace in a 40 MB log. The gameplay port is never presented either way.
+				Logger.LogError(exception.ToString());
+				Refuse("This server could not start because Driftwood failed while setting it up (" +
+					exception.GetType().Name + ": " + exception.Message + ").");
+			}
+		}
+
+		private void Boot()
+		{
 			Log = Logger;
 
 			// FIRST, before anything can make a sound. -batchmode does NOT guarantee silence: on
@@ -96,7 +112,15 @@ namespace DriftwoodHost
 			_readiness.WorldName = _config.WorldName;
 			_readiness.EffectiveBindAddress = _config.BindAddress;
 			_api = new HostHttpApi(_config.EffectiveHttpPort, _readiness, _config.AuthToken, WorldLifecycle.SaveNow);
-			_api.Start();
+			if (!_api.Start())
+			{
+				// The panel decides whether this server is up by asking this endpoint. Hosting
+				// without it would produce a server that works and reports as down, which the
+				// panel would then restart, forever. Refusing with a reason is the kinder failure.
+				Refuse("This server could not open its status port " + _config.EffectiveHttpPort +
+					". Something else is using it, so the panel would never be able to tell whether this server was running.");
+				return;
+			}
 
 			// Saves go into this server's own folder BEFORE anything writes one. The game's
 			// default is a per-user folder every instance on the box would share.
