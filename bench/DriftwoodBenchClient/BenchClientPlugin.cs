@@ -67,6 +67,25 @@ namespace DriftwoodBenchClient
 				return;
 			}
 
+			// A freshly-joined player is put through the intro and the tutorial, and the game blocks
+			// movement input while that runs - so the first bench run produced a spawned player
+			// standing perfectly still. For a LOAD GENERATOR that is the wrong measurement: the
+			// cost we are after is the host simulating and replicating a MOVING rigidbody.
+			try
+			{
+				Harmony unblock = new Harmony("com.humangenome.driftwood.benchclient.unblock");
+				MethodInfo getter = AccessTools.PropertyGetter(typeof(Player), "BlockInputs");
+				if (getter != null)
+				{
+					unblock.Patch(getter, postfix: new HarmonyMethod(
+						AccessTools.Method(typeof(BenchClientPlugin), nameof(NeverBlockInputs))));
+				}
+			}
+			catch (Exception exception)
+			{
+				Logger.LogWarning("Could not unblock player input: " + exception.Message);
+			}
+
 			QualitySettings.vSyncCount = 0;
 			Application.targetFrameRate = 30;
 
@@ -123,6 +142,30 @@ namespace DriftwoodBenchClient
 				yield return new WaitForSeconds(5f);
 				Logger.LogInfo("BENCH alive players=" + (PlayerManager.Players?.Count ?? -1) +
 					" pos=" + (Player.LocalPlayer != null ? Player.LocalPlayer.Transform.position.ToString("F1") : "?"));
+			}
+		}
+
+		private static void NeverBlockInputs(ref bool __result) => __result = false;
+
+		private void FixedUpdate()
+		{
+			// Belt and braces. If the game still refuses to move the character, push the rigidbody
+			// directly so the host has a genuinely moving body to simulate and replicate. A bench
+			// rig that measures a stationary player is measuring the wrong thing.
+			if (!_walk.Value || Player.LocalPlayer == null) return;
+			try
+			{
+				Rigidbody body = Player.LocalPlayer.Rigidbody;
+				if (body == null) return;
+				Vector3 wanted = new Vector3(_direction.x, 0f, _direction.y) * 4f;
+				Vector3 current = body.linearVelocity;
+				if (new Vector2(current.x, current.z).sqrMagnitude < 1f)
+				{
+					body.linearVelocity = new Vector3(wanted.x, current.y, wanted.z);
+				}
+			}
+			catch
+			{
 			}
 		}
 
