@@ -254,7 +254,17 @@ namespace DriftwoodHost
 				" world \"" + WorldLifecycle.SelectedWorld + "\" in " + _readiness.SaveDirectory);
 
 			// Slots BEFORE StartConnection - afterwards the setter is silently ignored.
-			string slotFailure = SlotGuard.Configure(_transport, _config.MaxPlayers, hostMode: _config.HostMode && !_config.CountHostPlayer);
+			// HostMode is a LOCKED INVARIANT, not a setting: Client.OnStartServer builds the world
+			// only for a local client, so a server without one presents a port and an empty
+			// universe. It is honoured as a config key because the panel writes it, but it is
+			// never obeyed downwards.
+			if (!_config.HostMode)
+			{
+				Logger.LogWarning("HostMode was set to false. It is being ignored: this game only builds its world for a local client, so a server without one would bind a port and host nothing.");
+			}
+			// The loopback connection occupies a transport slot either way. The only question is
+			// whether it is SOLD, and the answer is no unless somebody explicitly asked for it.
+			string slotFailure = SlotGuard.Configure(_transport, _config.MaxPlayers, hostMode: !_config.CountHostPlayer);
 			if (slotFailure != null)
 			{
 				Refuse(slotFailure);
