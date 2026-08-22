@@ -37,5 +37,23 @@ if [ -f "$changelog" ]; then
     || bad "CHANGELOG.md has no heading for $version"
 fi
 
+# Family decision (2026-08-03): plugin ids are com.humangenome.<product>.*,
+# matching ValheimOne. This is checked in the BUILD rather than remembered, because a BepInEx plugin
+# id becomes a config filename on every player's disk - renaming it after a release orphans every
+# config that exists, and it is free only before the first tag.
+if grep -rn 'com\.survivalservers\.' "$root/src" "$root/host-mod" "$root/bench" "$root/protocol" \
+     "$root/docs" "$root/README.md" 2>/dev/null | grep -q .; then
+  bad "plugin/config ids must be com.humangenome.*, not com.survivalservers.*"
+  grep -rn 'com\.survivalservers\.' "$root/src" "$root/host-mod" "$root/bench" "$root/protocol" \
+    "$root/docs" "$root/README.md" 2>/dev/null | head -5 | sed 's/^/    /'
+fi
+
+# The plugin id and the config path the supervisor writes must be the same string, or the panel
+# writes a file the mod never reads and every setting silently falls back to a default.
+plugin_id="$(sed -n 's:.*public const string Guid = "\([^"]*\)".*:\1:p' "$plugin" | head -1)"
+config_path="$(grep -o 'com\.humangenome\.driftwood\.host\.cfg' "$root/src/DriftwoodServer/HostOptions.cs" | head -1)"
+[ "$config_path" = "$plugin_id.cfg" ] || bad "supervisor writes '$config_path' but the plugin id is '$plugin_id'"
+note "plugin id: $plugin_id"
+
 [ "$fail" -eq 0 ] && note "version check OK" || true
 exit "$fail"
