@@ -94,7 +94,7 @@ namespace DriftwoodBenchClient
 
 		private IEnumerator Run()
 		{
-			yield return new WaitForSeconds(_startDelay.Value);
+			yield return new WaitForSecondsRealtime(_startDelay.Value);
 
 			ConnectionManager connectionManager = ConnectionManager.Instance;
 			Multipass multipass =
@@ -117,7 +117,7 @@ namespace DriftwoodBenchClient
 			// JoinOfflineLobby ends here too. Leaving the menu is what lets the island load and
 			// stops Client.SendSpawnPlayer waiting on Island.CurIsland forever.
 			MainMenuManager.CrashAnimation();
-			yield return new WaitForSeconds(1f);
+			yield return new WaitForSecondsRealtime(1f);
 			MainMenuManager.InstantCrash();
 
 			float deadline = Time.realtimeSinceStartup + 180f;
@@ -128,7 +128,7 @@ namespace DriftwoodBenchClient
 					Logger.LogError("BENCH no local player after 180s; not generating load.");
 					yield break;
 				}
-				yield return new WaitForSeconds(1f);
+				yield return new WaitForSecondsRealtime(1f);
 			}
 
 			_movement = Player.LocalPlayer.Movement;
@@ -139,7 +139,7 @@ namespace DriftwoodBenchClient
 
 			while (true)
 			{
-				yield return new WaitForSeconds(5f);
+				yield return new WaitForSecondsRealtime(5f);
 				Logger.LogInfo("BENCH alive players=" + (PlayerManager.Players?.Count ?? -1) +
 					" pos=" + (Player.LocalPlayer != null ? Player.LocalPlayer.Transform.position.ToString("F1") : "?"));
 			}

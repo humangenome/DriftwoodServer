@@ -146,6 +146,11 @@ namespace DriftwoodHost
 			BootMarkers.WriteSaveRoot(_readiness.SaveDirectory);
 
 			GhostHost.Suppress = _config.SuppressGhostHost;
+			EmptyWorldPause.Enabled = _config.PauseWorldWhenEmpty;
+			if (EmptyWorldPause.Enabled)
+			{
+				Logger.LogWarning("PauseWorldWhenEmpty is ON. The world will stand still while nobody is connected. This is a behaviour change, not just an optimisation - verify a real client can join, spawn and move on this server before relying on it.");
+			}
 			DriftwoodIdentity.HostDisplayName =
 				string.IsNullOrEmpty(_config.ServerName) ? "Server" : _config.ServerName;
 
@@ -236,7 +241,7 @@ namespace DriftwoodHost
 
 		private IEnumerator RunHost()
 		{
-			yield return new WaitForSeconds(_config.StartDelaySeconds);
+			yield return new WaitForSecondsRealtime(_config.StartDelaySeconds);
 
 			ConnectionManager connectionManager = ConnectionManager.Instance;
 			if (connectionManager == null)
@@ -363,7 +368,9 @@ namespace DriftwoodHost
 				}
 
 				_readiness.Write();
-				yield return new WaitForSeconds(2f);
+				// REALTIME, not WaitForSeconds: a scaled wait never completes while the empty-world
+				// pause holds timeScale at zero, which would freeze this loop and strand the server.
+				yield return new WaitForSecondsRealtime(2f);
 			}
 		}
 
@@ -450,6 +457,10 @@ namespace DriftwoodHost
 				_readiness.SetRoster(roster);
 				_readiness.ServerStarted = InstanceFinder.NetworkManager?.IsServerStarted ?? false;
 				_readiness.LocalClientStarted = InstanceFinder.NetworkManager?.IsClientStarted ?? false;
+
+				EmptyWorldPause.Update(_readiness.WorldRunning, _readiness.Players);
+				_readiness.WorldPaused = EmptyWorldPause.Paused;
+				_readiness.WorldResumeCount = EmptyWorldPause.ResumeCount;
 			}
 			catch (Exception exception)
 			{
@@ -464,7 +475,7 @@ namespace DriftwoodHost
 		{
 			while (true)
 			{
-				yield return new WaitForSeconds(30f);
+				yield return new WaitForSecondsRealtime(30f);
 				double windowSeconds;
 				List<SwallowCounter.Entry> alarming = SwallowCounter.Roll(out windowSeconds);
 				foreach (SwallowCounter.Entry entry in alarming)
@@ -481,7 +492,7 @@ namespace DriftwoodHost
 		{
 			while (!_stopping)
 			{
-				yield return new WaitForSeconds(1f);
+				yield return new WaitForSecondsRealtime(1f);
 				if (!File.Exists(_stopFilePath)) continue;
 
 				_stopping = true;
@@ -508,6 +519,7 @@ namespace DriftwoodHost
 				{
 					Logger.LogError("Shutdown save failed: " + exception.Message);
 				}
+				EmptyWorldPause.ForceResume();
 				try { CloseTransport(); }
 				catch (Exception exception) { Logger.LogError("Shutdown transport close failed: " + exception.Message); }
 

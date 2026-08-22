@@ -62,6 +62,9 @@ namespace DriftwoodHost
 		// Both default to 0 = LEAVE THE GAME'S OWN VALUE ALONE. Neither is a free win: the physics
 		// step is simulation fidelity and the tick rate is how often the world is replicated. They
 		// exist so the levers are measurable without a rebuild, not so they can be turned casually.
+		// Lever 3: freeze the world while nobody is connected. DEFAULT OFF until a real client has
+		// been proven to join a paused server, spawn and move.
+		public bool PauseWorldWhenEmpty;
 		public float PhysicsStepSeconds;
 		public int NetworkTickRate;
 
@@ -107,6 +110,7 @@ namespace DriftwoodHost
 			config.CountHostPlayer = config.Bool(config.CountHostPlayer, "CountHostPlayer");
 			config.SuppressGhostHost = config.Bool(config.SuppressGhostHost, "SuppressGhostHost", "HideHostPlayer");
 			config.TargetFrameRate = config.Int(config.TargetFrameRate, "TargetFrameRate", "FrameRate", "Fps");
+			config.PauseWorldWhenEmpty = config.Bool(config.PauseWorldWhenEmpty, "PauseWorldWhenEmpty", "FreezeWhenEmpty");
 			config.PhysicsStepSeconds = config.Float(config.PhysicsStepSeconds, "PhysicsStepSeconds", "FixedDeltaTime");
 			config.NetworkTickRate = config.Int(config.NetworkTickRate, "NetworkTickRate", "TickRate");
 
