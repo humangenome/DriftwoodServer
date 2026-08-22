@@ -68,3 +68,29 @@ DriftwoodServer --snapshot appsettings.json
 Asks the running server to save, waits for the save tree to settle, zips it, and then **reads the
 archive back** to confirm the world file is in it. A snapshot that would not restore the world is
 reported as a failure rather than written and forgotten.
+
+## Tuning: what is measured, and what it is worth
+
+All figures are idle CPU on the measurement rig (Intel i3-7100), as a percentage of one core.
+Deltas transfer between machines; the absolute numbers do not.
+
+| Setting | Idle CPU | Worth | Ship it? |
+|---|---|---|---|
+| *(nothing — as the game runs)* | 85.3% | — | — |
+| `SuppressGhostHost = true` | **48.3%** | **−37 points (−43%)** | **Yes, on by default.** The host's placeholder player is a rigidbody, a buoyancy body and a replication entry stepping at 100 Hz forever, and no customer should ever see it. |
+| `PauseWorldWhenEmpty = true` | **29.4%** | **−19 points (−39%)** | **Off by default; turn it on once a retail client has been seen to join a frozen server.** A headless client already has been: the world resumed exactly once, the player spawned and moved, zero swallowed exceptions. |
+| `PhysicsStepSeconds = 0.0333` | 44.5% | −3.8 points | **No.** The game ships a 100 Hz timestep; coarsening it 3.3x buys under 8% and costs simulation fidelity in a game whose whole feel is objects moving. |
+| `NetworkTickRate = 20` | 47.0% | −1.4 points | **No.** Costs how often the world reaches players for almost nothing. |
+| `TargetFrameRate` | see below | being measured | The engine ignores `Application.targetFrameRate` in batch mode, so the host pads the frame itself. Until that measurement lands, leave it at 0. |
+| `IdleFrameRate` | being measured | — | Drops the loop rate while nobody is connected and restores it within one frame of anybody arriving. Leave at 0 until measured. |
+
+**Per player, on top of whatever the idle figure is: about +15% of a core for the first and +11%
+for the second, and motion adds only about 1 point** — the cost is a body existing and being
+replicated, not what it does. A full 8-slot server lands near a whole core.
+
+### The two settings that are not worth touching, and why that is worth writing down
+
+`PhysicsStepSeconds` and `NetworkTickRate` were built because the decompile suggested they were the
+big levers. They are not: together they buy 4 points out of 49. They stay in the config so the
+measurement is repeatable, and they stay at the game's own values so nothing pays a fidelity cost
+for a rounding error.
