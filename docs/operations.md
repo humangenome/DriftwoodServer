@@ -78,11 +78,11 @@ Deltas transfer between machines; the absolute numbers do not.
 |---|---|---|---|
 | *(nothing — as the game runs)* | 85.3% | — | — |
 | `SuppressGhostHost = true` | **48.3%** | **−37 points (−43%)** | **Yes, on by default.** The host's placeholder player is a rigidbody, a buoyancy body and a replication entry stepping at 100 Hz forever, and no customer should ever see it. |
-| `PauseWorldWhenEmpty = true` | **29.4%** | **−19 points (−39%)** | **Off by default; turn it on once a retail client has been seen to join a frozen server.** A headless client already has been: the world resumed exactly once, the player spawned and moved, zero swallowed exceptions. |
+| `PauseWorldWhenEmpty = true` | **29.4%** | **−19 points (−39%)**, but superseded by `IdleFrameRate`, which reaches everything this reaches and more | **Off by default; turn it on once a retail client has been seen to join a frozen server.** A headless client already has been: the world resumed exactly once, the player spawned and moved, zero swallowed exceptions. |
 | `PhysicsStepSeconds = 0.0333` | 44.5% | −3.8 points | **No.** The game ships a 100 Hz timestep; coarsening it 3.3x buys under 8% and costs simulation fidelity in a game whose whole feel is objects moving. |
 | `NetworkTickRate = 20` | 47.0% | −1.4 points | **No.** Costs how often the world reaches players for almost nothing. |
 | `TargetFrameRate` | see below | being measured | The engine ignores `Application.targetFrameRate` in batch mode, so the host pads the frame itself. Until that measurement lands, leave it at 0. |
-| `IdleFrameRate` | being measured | — | Drops the loop rate while nobody is connected and restores it within one frame of anybody arriving. Leave at 0 until measured. |
+| **`IdleFrameRate = 5`** | **12.9%** | **−35 points (−73%)** | **The biggest lever there is.** Runs the server loop at 5 fps while nobody is connected and restores full rate within one frame of anybody arriving. On a fleet core that is **8.6-11.7%**, which meets the ≤10% idle bar. Off until a retail client has been seen to join a stood-down server. |
 
 **Per player, on top of whatever the idle figure is: about +15% of a core for the first and +11%
 for the second, and motion adds only about 1 point** — the cost is a body existing and being
