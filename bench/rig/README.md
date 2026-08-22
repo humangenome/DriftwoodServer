@@ -22,6 +22,15 @@ them to `C:\` on that box and drive them with `runtask.ps1`.
 - **Check what else is on the box first** (`topcpu.ps1`). A single forgotten process invalidated
   every number taken before it was found, and it made a hungry server look *cheaper*, not more
   expensive.
+- **Match the exact process, never a substring.** Killing PowerShell processes matching
+  `*matrix5.ps1*` also matched `stopmatrix5.ps1` (the killer, which killed itself before writing its
+  completion marker) and `aftermatrix5.ps1` (a queued test, killed as collateral, which then read as
+  `Ready` — indistinguishable from having finished). A substring is not a scope.
+- **Every script ends with an explicit `*_DONE` marker, and watchers look for that marker.** A
+  harness that stops is indistinguishable from a harness that passed. Each gate also runs inside its
+  own `try` so one failure cannot take the run with it.
+- **A queued scheduled task has already read its script.** Editing the file afterwards changes
+  nothing; queue a new task instead.
 - **`analyse.py` reports private bytes, not working set.** Working set collapsed from 533 MB to
   73 MB under memory pressure on the same instance whose private bytes never moved.
 
