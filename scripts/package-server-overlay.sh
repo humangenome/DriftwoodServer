@@ -83,6 +83,16 @@ if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   exit 2
 fi
 
+# The leading v is required, not cosmetic. The git tag is vX.Y.Z, the packaged
+# bundle lands in dist/release/<tag>/ and the publish step looks for it
+# under the same <tag>, so packaging as "0.1.0" and publishing as "v0.1.0" simply
+# does not find the file. The host's shared cache directory is keyed on the tag
+# string too.
+if [[ "$TAG" != v* ]]; then
+  echo "tag '$TAG' must start with 'v' (the git tag is v$TAG)" >&2
+  exit 2
+fi
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
@@ -132,8 +142,12 @@ say "BepInEx core $core_version"
 # The tree must be clean. This repo is a shared worktree: another lane's
 # half-finished files sit next to yours and get compiled into the release without
 # appearing anywhere in it. Build a release from a checkout of the tag.
+#
+# scripts/ is in the list because this script and its publisher ARE build inputs:
+# an uncommitted edit here changes what gets packed and what gets uploaded, and it
+# is the one input whose drift leaves no trace in the artifact at all.
 if [[ "${ALLOW_DIRTY:-0}" != "1" ]] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
-  dirty=$(git -C "$ROOT" status --porcelain -- host-mod src tools Directory.Build.props Directory.Packages.props global.json || true)
+  dirty=$(git -C "$ROOT" status --porcelain -- host-mod src tools scripts Directory.Build.props Directory.Packages.props global.json || true)
   if [[ -n "$dirty" ]]; then
     printf 'FAIL: the tree has uncommitted changes under the build inputs:\n%s\n' "$dirty" >&2
     echo "Package from a clean checkout (git worktree add <dir> <tag>), or set ALLOW_DIRTY=1 for a dev build." >&2
