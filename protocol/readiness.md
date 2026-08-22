@@ -32,6 +32,8 @@ must actually consume it — a correct signal that nothing reads is worth zero.
 | `bootAssertionsPassed` | bool | Every required guard installed, config validated, save root redirected and slot limit read back in force. |
 | `displayNamesResolved` | bool | False once any connected player's display name came from a placeholder rather than a real source. |
 | `effectiveBindAddress`, `effectiveTargetFrameRate` | string, int | Read back from the engine, not echoed from the config. |
+| `actualFrameRate` | number | The server's **measured** frame rate over the last ~512 frames. If it sits well below `effectiveTargetFrameRate`, the cap is not what is limiting this server and no frame-cap tuning will change its cost. |
+| `frameTimeMeanMs`, `frameTimeP95Ms`, `frameTimeWorstMs` | number | Frame-time spread. The world simulation runs off the same loop, so a stalled frame is a stalled world for every connected player — a spike invisible to the average is exactly what "the server feels laggy" is made of. |
 | `swallowedTotal` | int | Total exceptions swallowed by the two deliberate swallow patches since start. **Expected to be 0.** A rising number is a broken feature wearing a seatbelt, not a handled edge case. |
 | `swallowed` | array | Per-method `{method, total, peakPerSecond, lastException}`. |
 | `patchesApplied` / `patchesMissing` / `patchesFailed` / `featuresStoodDown` | string[] | The boot report. `patchesApplied` is what the patch library confirmed it patched, not what was requested. |

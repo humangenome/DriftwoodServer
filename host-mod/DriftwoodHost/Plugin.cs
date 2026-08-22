@@ -36,6 +36,7 @@ namespace DriftwoodHost
 		private bool _stopping;
 		private string _stopFilePath;
 		private readonly List<string> _installedGuards = new List<string>();
+		private readonly FrameStats _frames = new FrameStats();
 
 		private void Awake()
 		{
@@ -324,10 +325,21 @@ namespace DriftwoodHost
 			}
 		}
 
+		private void Update()
+		{
+			_frames.Sample(Time.unscaledDeltaTime);
+		}
+
 		private void Sample()
 		{
 			try
 			{
+				double fps, meanMs, p95Ms, worstMs;
+				_frames.Snapshot(out fps, out meanMs, out p95Ms, out worstMs);
+				_readiness.ActualFrameRate = fps;
+				_readiness.FrameTimeMeanMs = meanMs;
+				_readiness.FrameTimeP95Ms = p95Ms;
+				_readiness.FrameTimeWorstMs = worstMs;
 				_readiness.WorldObjectPresent = Server.Instance != null;
 				_readiness.IslandLoaded = Island.CurIsland != null;
 				_readiness.IslandLoading = IslandManager.IsLoading;

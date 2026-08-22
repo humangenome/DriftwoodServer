@@ -62,6 +62,12 @@ namespace DriftwoodHost
 		public string PluginVersion = string.Empty;
 		public string EffectiveBindAddress = string.Empty;
 		public int EffectiveTargetFrameRate;
+		// Measured, not configured. If this sits well below the cap, the cap is not what is
+		// limiting this server and no frame-cap tuning will change its cost.
+		public double ActualFrameRate;
+		public double FrameTimeMeanMs;
+		public double FrameTimeP95Ms;
+		public double FrameTimeWorstMs;
 		public List<string> PatchesApplied = new List<string>();
 		public List<string> PatchesMissing = new List<string>();
 		public List<string> PatchesFailed = new List<string>();
@@ -138,6 +144,10 @@ namespace DriftwoodHost
 					.Add("displayNamesResolved", DisplayNamesResolved)
 					.Add("effectiveBindAddress", EffectiveBindAddress)
 					.Add("effectiveTargetFrameRate", EffectiveTargetFrameRate)
+					.Add("actualFrameRate", ActualFrameRate)
+					.Add("frameTimeMeanMs", FrameTimeMeanMs)
+					.Add("frameTimeP95Ms", FrameTimeP95Ms)
+					.Add("frameTimeWorstMs", FrameTimeWorstMs)
 					.Add("swallowedTotal", SwallowCounter.TotalSwallowed())
 					.AddRaw("swallowed", swallowJson.ToString())
 					.AddStrings("patchesApplied", PatchesApplied)
