@@ -57,6 +57,27 @@ public class HostOptionsTests
     }
 
     [Fact]
+    public void RejectsAFrameCapFarBelowTheNetworkTickRate()
+    {
+        // The game's netcode ticks at 50 Hz. A cap under 20 runs the loop far below that and
+        // batches every send - a smoothness cost paid for CPU, in a game whose whole feel is
+        // objects moving. If it is genuinely wanted, the tick rate has to come down with it.
+        HostOptions options = Valid();
+        options.TargetFrameRate = 5;
+        Assert.Throws<InvalidDataException>(options.Validate);
+    }
+
+    [Fact]
+    public void AllowsAnIdleRateOfFiveBecauseNobodyIsWatching()
+    {
+        // The IDLE rate is a different thing: with nobody connected there is no smoothness to cost.
+        HostOptions options = Valid();
+        options.TargetFrameRate = 60;
+        options.IdleFrameRate = 5;
+        options.Validate();
+    }
+
+    [Fact]
     public void RejectsAStateRootInsideTheGameRoot()
     {
         HostOptions options = Valid();

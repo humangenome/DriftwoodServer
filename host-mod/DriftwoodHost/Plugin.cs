@@ -37,6 +37,7 @@ namespace DriftwoodHost
 		private string _stopFilePath;
 		private readonly List<string> _installedGuards = new List<string>();
 		private readonly FrameStats _frames = new FrameStats();
+		private bool _warnedAboutCapBelowTick;
 
 		private void Awake()
 		{
@@ -447,6 +448,22 @@ namespace DriftwoodHost
 			{
 				Logger.LogWarning("Could not read or set the network tick rate: " + exception.Message);
 			}
+		}
+
+		// A frame cap below the netcode tick rate does not break anything, but it batches sends:
+		// FishNet ticks on wall-clock time and will run two ticks in one frame to keep up. In a
+		// game whose whole feel is objects moving, that is a smoothness cost paid for CPU, and it
+		// should be a decision rather than an accident.
+		private void WarnIfCapIsBelowTheTick()
+		{
+			if (_warnedAboutCapBelowTick) return;
+			int cap = _config.TargetFrameRate;
+			int tick = _readiness.EffectiveNetworkTickRate;
+			if (cap <= 0 || tick <= 0 || cap >= tick) return;
+			_warnedAboutCapBelowTick = true;
+			Logger.LogWarning("The frame cap (" + cap + " fps) is below this game's network tick rate (" +
+				tick + " Hz), so the server will run more than one tick in some frames and batch its sends. " +
+				"That is a smoothness cost, not an error - set the cap at or above the tick rate unless it was a deliberate trade.");
 		}
 
 		private void Sample()

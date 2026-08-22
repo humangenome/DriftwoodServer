@@ -93,6 +93,13 @@ internal sealed class HostOptions
         if (HttpPort == GamePort) throw new InvalidDataException("HttpPort must differ from GamePort.");
         if (Slots is < 1 or > 250) throw new InvalidDataException("Slots must be between 1 and 250.");
         if (TargetFrameRate is < 0 or > 1000) throw new InvalidDataException("TargetFrameRate must be between 0 and 1000.");
+        // The game's own netcode tick is 50 Hz. A cap below it batches sends - a smoothness cost
+        // paid for CPU, which should be deliberate. 20 is the floor the tick rate itself allows.
+        if (TargetFrameRate is > 0 and < 20)
+        {
+            throw new InvalidDataException(
+                "TargetFrameRate below 20 would run the server loop far under its network tick rate and batch every send. If that is genuinely wanted, lower NetworkTickRate to match and record why.");
+        }
         if (IdleFrameRate != 0 && IdleFrameRate is < 1 or > 1000)
         {
             throw new InvalidDataException("IdleFrameRate must be between 1 and 1000 when set; it cannot be 0-equivalent because the netcode is serviced inside the same loop.");
