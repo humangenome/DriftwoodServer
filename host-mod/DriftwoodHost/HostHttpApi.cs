@@ -752,6 +752,10 @@ namespace DriftwoodHost
 				.Add("port", _readiness.Port)
 				.Add("slots", _readiness.Slots)
 				.Add("world", _readiness.WorldName)
+				// Empty in the normal case. Non-empty means a world restore was accepted and is
+				// waiting for the start that applies it - which is a world that has NOT changed
+				// yet, and is exactly the state that must never be invisible.
+				.Add("pending_restore", SnapshotStore.PendingRestoreId)
 				.AddStrings("roster", _readiness.Roster())
 				.Close();
 		}

@@ -38,6 +38,12 @@ namespace DriftwoodHost
 		private static string _snapshotDirectory = string.Empty;
 		private static string _worldName = string.Empty;
 		private static readonly object Sync = new object();
+		// The staged-restore directory and its marker. The leading dot keeps it out of the
+		// *.zip listing, and the marker is written LAST so a half-extracted stage is never
+		// mistaken for a complete one.
+		private const string PendingName = ".pending-restore";
+		private const string MarkerName = "restore.id";
+		private static string _pendingId = string.Empty;
 
 		// path -> (size, mtime ticks, sha256). Hashing a small text zip is cheap, but the
 		// launcher lists snapshots on every dialog open and every refresh, and rehashing the
@@ -242,13 +248,29 @@ namespace DriftwoodHost
 		// ------------------------------------------------------------------
 		// Restoring
 		// ------------------------------------------------------------------
-		// Order, and every step of it is load-bearing:
+		// A RESTORE IS STAGED, NOT APPLIED IN PLACE, AND THAT IS THE WHOLE POINT.
+		//
+		// The obvious implementation - swap the files in now, then end the process - was
+		// written, shipped, and is silently a no-op. Measured on a real host: restore
+		// answered 200, the pre-restore archive appeared, the files were swapped, and 0.84
+		// seconds later the world on disk was the LIVE world again. Ending the process runs
+		// Application.Quit, Unity runs the game's own SaveManager.OnApplicationQuit, and that
+		// writes the in-memory world straight back over the files the restore had just put
+		// there. Server.OnStopServer saves a third time, and AutoSaver can fire in the gap.
+		// The customer is told the restore worked and their world is untouched - the worst
+		// failure a backup feature can have, because it only shows up much later.
+		//
+		// So the swap happens where NOTHING holds a world in memory: at the START of the next
+		// boot, before the world is loaded. The order:
 		//   1. snapshot what is there now, so a restore is never a one-way door;
-		//   2. extract into a staging directory, so a corrupt archive cannot half-replace a
-		//      live world;
+		//   2. extract into the PENDING directory, so a corrupt archive is caught before
+		//      anything is replaced;
 		//   3. reconcile the world NAME (see below);
-		//   4. swap the staged tree into place;
-		//   5. end the process, so the supervisor brings the world back on the restored save.
+		//   4. end the process - and it does not matter what the game saves on the way out;
+		//   5. next boot: ApplyPending() swaps the staged tree in before the world loads.
+		//
+		// A restore that is staged but never applied is visible (`pending_restore` on
+		// /status, and a loud log line), which is the honest state rather than a silent one.
 		internal static bool Restore(string id, out string failure)
 		{
 			failure = null;
@@ -272,27 +294,94 @@ namespace DriftwoodHost
 					return false;
 				}
 
-				string staging = Path.Combine(_snapshotDirectory, ".restore-" + Guid.NewGuid().ToString("N"));
+				string pending = PendingDirectory;
 				try
 				{
-					System.IO.Directory.CreateDirectory(staging);
-					if (!Extract(archivePath, staging, out failure)) return false;
-					if (!ReconcileWorldName(staging, out failure)) return false;
-					SwapIn(staging);
+					// A previous staged restore that never got applied is superseded by this
+					// one, not merged with it.
+					if (System.IO.Directory.Exists(pending)) System.IO.Directory.Delete(pending, true);
+					System.IO.Directory.CreateDirectory(pending);
+					if (!Extract(archivePath, pending, out failure)) { Discard(pending); return false; }
+					if (!ReconcileWorldName(pending, out failure)) { Discard(pending); return false; }
+					File.WriteAllText(Path.Combine(pending, MarkerName), id);
 				}
 				catch (Exception exception)
 				{
 					failure = exception.GetType().Name + ": " + exception.Message;
+					Discard(pending);
 					return false;
-				}
-				finally
-				{
-					try { if (System.IO.Directory.Exists(staging)) System.IO.Directory.Delete(staging, true); } catch { }
 				}
 			}
 
-			Plugin.Log?.LogWarning("World restored from snapshot " + id + ". Ending the process so the supervisor brings the server back on the restored world.");
+			_pendingId = id;
+			Plugin.Log?.LogWarning("World restore from snapshot " + id + " is staged. Ending the process; the world is swapped in on the next start, before it is loaded.");
 			return true;
+		}
+
+		// THE OTHER HALF OF Restore(), and it runs at boot before the world is loaded.
+		//
+		// Called from Plugin.Awake the moment the save directory and the world name are both
+		// known and long before WorldLifecycle.LoadOrCreateWorld, so at the instant the files
+		// are swapped there is no world in memory anywhere that could be written over them.
+		internal static string ApplyPending()
+		{
+			if (!Ready) return null;
+			string pending = PendingDirectory;
+			string marker = Path.Combine(pending, MarkerName);
+			if (!System.IO.Directory.Exists(pending) || !File.Exists(marker)) return null;
+
+			string id;
+			try { id = (File.ReadAllText(marker) ?? string.Empty).Trim(); }
+			catch { id = string.Empty; }
+			if (id.Length == 0) id = "(unnamed)";
+
+			try
+			{
+				try { File.Delete(marker); } catch { }
+				// Re-run the reconcile against the world name THIS boot is configured for. The
+				// panel can change the world name between the restore being staged and the
+				// server coming back, and a staged file named for the old world would restore
+				// into a world nothing loads - which looks exactly like the bug this whole
+				// mechanism exists to fix.
+				string failure;
+				if (!ReconcileWorldName(pending, out failure))
+				{
+					Plugin.Log?.LogError("A staged world restore (" + id + ") could not be applied: " + failure +
+						". The world on disk has NOT been changed and the staged files have been left in " + pending + ".");
+					_pendingId = id;
+					return null;
+				}
+				SwapIn(pending);
+			}
+			catch (Exception exception)
+			{
+				Plugin.Log?.LogError("A staged world restore (" + id + ") could not be applied: " +
+					exception.GetType().Name + ": " + exception.Message);
+				_pendingId = id;
+				return null;
+			}
+			Discard(pending);
+			_pendingId = string.Empty;
+			Plugin.Log?.LogWarning("World restored from snapshot " + id + " before loading. This server is now running the restored world.");
+			return id;
+		}
+
+		// Non-empty while a restore has been staged and not yet applied. Published on /status
+		// so a restore that is waiting for a start the supervisor never made is visible to the
+		// panel rather than being a world that quietly did not change.
+		internal static string PendingRestoreId
+		{
+			get { return _pendingId ?? string.Empty; }
+		}
+
+		private static string PendingDirectory
+		{
+			get { return Path.Combine(_snapshotDirectory, PendingName); }
+		}
+
+		private static void Discard(string directory)
+		{
+			try { if (System.IO.Directory.Exists(directory)) System.IO.Directory.Delete(directory, true); } catch { }
 		}
 
 		// Called by the HTTP layer AFTER the response has been written, so the launcher sees

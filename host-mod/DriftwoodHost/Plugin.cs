@@ -165,6 +165,16 @@ namespace DriftwoodHost
 			// and the world name - are known.
 			SnapshotStore.Initialise(_readiness.SaveDirectory, instanceRoot, _config.WorldName);
 
+			// APPLY A STAGED WORLD RESTORE HERE, AND NOWHERE ELSE.
+			//
+			// This is the earliest moment the save directory and the world name are both
+			// resolved, and it is long before WorldLifecycle.LoadOrCreateWorld - so at the
+			// instant the files are swapped there is no world in memory that could be written
+			// over them. Doing it at the other end, just before the process exits, is what
+			// this fixes: the game's own SaveManager.OnApplicationQuit wrote the live world
+			// straight back over the restored files and the restore was silently a no-op.
+			SnapshotStore.ApplyPending();
+
 			GhostHost.Suppress = _config.SuppressGhostHost;
 			EmptyWorldPause.Enabled = _config.PauseWorldWhenEmpty;
 			if (EmptyWorldPause.Enabled)
