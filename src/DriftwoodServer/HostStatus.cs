@@ -56,7 +56,9 @@ internal sealed class StatusStore
         ReadinessDocument? readiness = null,
         string pinnedBuildId = "")
     {
-        int players = readiness?.Players ?? 0;
+        // -1 is UNKNOWN and must survive every hop. Defaulting a missing reading to 0 is how a
+        // server that has not reported yet gets mistaken for an empty one.
+        int players = readiness?.Players ?? -1;
         int slots = readiness?.Slots ?? _options.Slots;
         HostStatus status = new(
             phase,
@@ -72,7 +74,7 @@ internal sealed class StatusStore
             readiness?.Port ?? _options.GamePort,
             slots,
             players,
-            slots > 0 && players >= slots,
+            players >= 0 && slots > 0 && players >= slots,
             phase == HostPhase.Hosting && (readiness?.WorldRunning ?? false),
             readiness?.WorldName ?? _options.WorldName,
             readiness?.SwallowedTotal ?? 0,

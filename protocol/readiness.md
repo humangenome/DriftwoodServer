@@ -26,7 +26,7 @@ must actually consume it — a correct signal that nothing reads is worth zero.
 | `port`, `slots` | int | The gameplay port and the number of **sold** slots. |
 | `transportMaxClients` | int | What the transport is actually enforcing. Normally `slots + 1`: the host's own loopback connection occupies a transport slot and is never sold. A value equal to `slots` means the reservation is missing and the server would admit one player fewer than it sold; the transport default of `4095` means the limit never took effect at all. |
 | `connectedTransportClients` | int | Raw transport connections, including the host's own. |
-| `players` | int | Connected players as a customer would count them, i.e. `connectedTransportClients` minus the host's own. |
+| `players` | int | Connected players as a customer would count them (`connectedTransportClients` minus the host's own) **when `worldRunning` is true**, and **`-1` = UNKNOWN otherwise**. Zero is what marks a server empty and an empty server gets reaped, so a loading, wedged or stopped server never publishes a zero. |
 | `worldName`, `saveDirectory` | string | The loaded world and the directory it actually resolved to — not the one that was requested. |
 | `ghostHostSuppressed` | bool | True when the host's own placeholder player was not spawned. |
 | `bootAssertionsPassed` | bool | Every required guard installed, config validated, save root redirected and slot limit read back in force. |

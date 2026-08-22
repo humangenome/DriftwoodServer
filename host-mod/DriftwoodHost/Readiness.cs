@@ -136,7 +136,10 @@ namespace DriftwoodHost
 					.Add("slots", Slots)
 					.Add("transportMaxClients", TransportMaxClients)
 					.Add("connectedTransportClients", ConnectedTransportClients)
-					.Add("players", Players)
+					// UNKNOWN (-1) unless the world is genuinely running. Zero is what marks a
+					// server empty and an empty server gets reaped, so a loading or wedged server
+					// must never publish a zero. See protocol/http-api.md.
+					.Add("players", WorldRunning ? Players : -1)
 					.Add("worldName", WorldName)
 					.Add("saveDirectory", SaveDirectory)
 					.Add("ghostHostSuppressed", GhostHostSuppressed)
