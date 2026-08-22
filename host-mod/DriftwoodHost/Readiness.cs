@@ -78,6 +78,11 @@ namespace DriftwoodHost
 		public bool LoopIdling;
 		public int IdleTransitions;
 		public int WorldResumeCount;
+		// Proof the empty-world freeze flushes on the way in. The AutoSaver runs on scaled time,
+		// so a pause that did NOT save first leaves the last session's tail dirty in memory until
+		// something loses it. A rising failure count is a data-loss risk, not a curiosity.
+		public int WorldSavesOnPause;
+		public int WorldSaveOnPauseFailures;
 		public List<string> PatchesApplied = new List<string>();
 		public List<string> PatchesMissing = new List<string>();
 		public List<string> PatchesFailed = new List<string>();
@@ -171,6 +176,8 @@ namespace DriftwoodHost
 					.Add("loopIdling", LoopIdling)
 					.Add("idleTransitions", IdleTransitions)
 					.Add("worldResumeCount", WorldResumeCount)
+					.Add("worldSavesOnPause", WorldSavesOnPause)
+					.Add("worldSaveOnPauseFailures", WorldSaveOnPauseFailures)
 					.Add("swallowedTotal", SwallowCounter.TotalSwallowed())
 					.AddRaw("swallowed", swallowJson.ToString())
 					.AddStrings("patchesApplied", PatchesApplied)

@@ -13,6 +13,13 @@ namespace DriftwoodHost
 	// The panel reads them back and reports the server STOPPED on a mismatch or an absence, so a
 	// half-done save redirect or a missing required guard fails CLOSED instead of running as a
 	// healthy-looking server that pools every customer's world into one directory.
+	//
+	// "OR AN ABSENCE" was only half true until 2026-08-22: the panel's guard check failed on a
+	// missing marker and its save-root check PASSED on one. So a host whose save-root write threw
+	// - which Write() catches and continues from, below - kept hosting with that assertion
+	// silently downgraded to unverified, which is the one state it exists to catch. Both sides now
+	// fail closed on absence, and the panel only asks the question once the host is listening,
+	// which is what makes "absent" unambiguous rather than merely "not booted yet".
 	internal static class BootMarkers
 	{
 		public const string SaveRootMarker = ".driftwood-saveroot";
@@ -60,8 +67,11 @@ namespace DriftwoodHost
 			}
 			catch (Exception exception)
 			{
+				// Catch and continue is deliberate, and it is only defensible because the panel
+				// treats an ABSENT marker as a failure. It does now, for both markers. If that
+				// ever stops being true, this must throw instead.
 				Plugin.Log?.LogError("Could not write the boot marker " + name + ": " + exception.Message +
-					". The panel will report this server as failed, which is correct.");
+					". The panel reads an absent marker as a failed start, so this server will report as down - which is correct.");
 			}
 			finally
 			{

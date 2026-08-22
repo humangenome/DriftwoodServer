@@ -32,6 +32,13 @@ namespace DriftwoodHost
 		private bool _idling;
 		private double _frozenWithPlayerSince;
 
+		// Occupancy as the READINESS SAMPLER sees it, which is the only place that knows the
+		// difference between a transport connection and a player. Pushed rather than pulled so the
+		// limiter, which runs every frame, never touches a game type.
+		private static int _observedPlayers = -1;
+		private static bool _observedHostClient;
+		private static double _observedAt;
+
 		internal static double MeasuredSleepMs { get; private set; }
 		// True while the loop is running at the reduced empty-server rate.
 		internal static bool Idling { get; private set; }
@@ -43,6 +50,20 @@ namespace DriftwoodHost
 		internal static void SetIdleFrameRate(int idleFrameRate)
 		{
 			if (_instance != null) _instance._idleFrameRate = idleFrameRate;
+		}
+
+		// Called from the readiness sampler every couple of seconds.
+		//
+		// `realPlayers` already excludes the host's own loopback connection, and `hostClientPresent`
+		// is the thing the old transport-count heuristic silently assumed: it decided "empty" as
+		// `transportClients <= 1`, which is only correct while the loopback client is one of those
+		// connections. If it ever dropped while a remote player stayed, one real player counted as
+		// one connection, the server read EMPTY, and the loop dropped to 5 fps with somebody on it.
+		internal static void ObserveOccupancy(int realPlayers, bool hostClientPresent)
+		{
+			_observedPlayers = realPlayers;
+			_observedHostClient = hostClientPresent;
+			_observedAt = Time.realtimeSinceStartupAsDouble;
 		}
 
 		internal static void Apply(int targetFrameRate)
@@ -73,11 +94,30 @@ namespace DriftwoodHost
 		private int CurrentTarget()
 		{
 			if (_idleFrameRate <= 0) return _targetFrameRate;
-			int transportClients;
-			try { transportClients = InstanceFinder.ServerManager?.Clients?.Count ?? 0; }
-			catch { return _targetFrameRate; }
-			// The host's own loopback connection is not a player, so "empty" is one connection.
-			bool empty = transportClients <= 1;
+
+			bool empty;
+			// The sampler's answer, while it is fresh. Its interval is 2 s; 10 s of tolerance
+			// covers a slow frame or a world load without letting a DEAD sampler pin the decision
+			// to a stale reading forever.
+			if (_observedPlayers >= 0 && Time.realtimeSinceStartupAsDouble - _observedAt < 10.0)
+			{
+				// If the host's own loopback client is gone, the server is in a state nobody
+				// designed for. Idling is the wrong guess there: run at full rate and let the rest
+				// of the machinery notice. Costing a core is recoverable; a player on a 5 fps
+				// server is what a customer feels.
+				empty = _observedHostClient && _observedPlayers <= 0;
+			}
+			else
+			{
+				int transportClients;
+				try { transportClients = InstanceFinder.ServerManager?.Clients?.Count ?? 0; }
+				catch { return _targetFrameRate; }
+				// Fallback only, and deliberately CONSERVATIVE: with no sampler to say which
+				// connection is the host's, treat anything at all as occupied rather than reading
+				// one remote player as an empty server.
+				empty = transportClients <= 0;
+			}
+
 			if (empty != _idling)
 			{
 				_idling = empty;
@@ -106,6 +146,16 @@ namespace DriftwoodHost
 				try { connected = InstanceFinder.ServerManager?.Clients?.Count ?? 0; } catch { connected = 0; }
 				if (connected > 1)
 				{
+					// Anything connected beyond the host also means we must not be idling. The
+					// watchdog used to restore timeScale only, so a server whose sampler had died
+					// could come back to a running clock at 5 fps.
+					if (_idling)
+					{
+						_idling = false;
+						Idling = false;
+						_observedPlayers = -1;
+						Plugin.Log?.LogWarning("The loop was idling with a client connected. Restored the full rate.");
+					}
 					// This runs every frame; the readiness sampler that normally releases the pause
 					// runs every two seconds. So on a NORMAL join this fires first, and saying
 					// "something failed" every single time would train everyone to ignore the one

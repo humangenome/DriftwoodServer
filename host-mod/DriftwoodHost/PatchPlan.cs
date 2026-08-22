@@ -24,8 +24,10 @@ namespace DriftwoodHost
 		Resolved,
 		// A clean "no such type" / "no such method". Only this counts as missing.
 		Missing,
-		// The lookup itself threw. Marked unknown and patched anyway, so a fault in the
-		// checker can never refuse to start a server that would have worked.
+		// The lookup itself threw. For an OPTIONAL target this is patched anyway, so a fault in
+		// the checker can never stand a feature down that would have worked. For a REQUIRED one
+		// it is a refusal - see UnknownRequired in PatchReport for why "patched anyway" was never
+		// implementable.
 		Unknown
 	}
 
@@ -72,8 +74,11 @@ namespace DriftwoodHost
 		public readonly List<string> FailedToApply = new List<string>();
 		public readonly List<string> StoodDownGroups = new List<string>();
 		public readonly List<string> Unknown = new List<string>();
+		// A REQUIRED target whose resolution threw. Kept apart from Unknown because the two have
+		// opposite consequences.
+		public readonly List<string> UnknownRequired = new List<string>();
 
-		public bool CanHost => MissingRequired.Count == 0 && FailedToApply.Count == 0;
+		public bool CanHost => MissingRequired.Count == 0 && FailedToApply.Count == 0 && UnknownRequired.Count == 0;
 
 		// One plain sentence a support person who has never seen the code can read.
 		public string Reason()
@@ -89,6 +94,12 @@ namespace DriftwoodHost
 				return "This server will not host because Driftwood could not modify " +
 					string.Join(", ", FailedToApply) +
 					". The gameplay port stays shut, so this server reports as down rather than as a healthy server with nothing behind it.";
+			}
+			if (UnknownRequired.Count > 0)
+			{
+				return "This server will not host because Driftwood could not even determine whether " +
+					string.Join(", ", UnknownRequired) +
+					" still exists in this game build. That guard sits on the player-spawn path, so continuing would present a port nobody could spawn into.";
 			}
 			return "All required game modifications applied.";
 		}
@@ -135,10 +146,25 @@ namespace DriftwoodHost
 				}
 				catch (Exception exception)
 				{
-					// Conservative in the safe direction: a checker fault must never refuse to
-					// start a server that would have worked.
+					// "Conservative in the safe direction" is only true for an OPTIONAL target.
+					//
+					// For a REQUIRED one this was FAIL-OPEN, and the comment describing it as
+					// "patched anyway" was never implementable: the catch leaves target.Resolved
+					// null, so pass 4 skips it (`if (target.Resolved == null) continue;`), pass 3
+					// does not count it missing, and CanHost stayed true. The server came up
+					// presenting a port with a spawn-path guard that was never installed - the
+					// exact silent-failure shape the whole plan exists to refuse - and only the
+					// panel's guard-marker net caught it, afterwards.
+					//
+					// A required guard whose existence we cannot even determine is not a guard.
 					target.Outcome = ResolveOutcome.Unknown;
 					report.Unknown.Add(target.Id + " (" + exception.GetType().Name + ")");
+					if (target.Necessity == PatchNecessity.Required)
+					{
+						report.UnknownRequired.Add(target.Id + " (" + exception.GetType().Name + ": " + exception.Message + ")");
+						warn("REQUIRED patch target could not be resolved: " + target.Id + " - " +
+							exception.GetType().Name + ": " + exception.Message);
+					}
 				}
 			}
 
@@ -162,11 +188,12 @@ namespace DriftwoodHost
 				else report.MissingOptional.Add(target.Id);
 			}
 
-			if (report.MissingRequired.Count > 0)
+			if (report.MissingRequired.Count > 0 || report.UnknownRequired.Count > 0)
 			{
 				// Do not patch anything at all. A half-patched game is harder to diagnose than
 				// an unpatched one, and we are refusing to host either way.
-				warn("REQUIRED PATCH TARGETS MISSING: " + string.Join(", ", report.MissingRequired));
+				if (report.MissingRequired.Count > 0) warn("REQUIRED PATCH TARGETS MISSING: " + string.Join(", ", report.MissingRequired));
+				if (report.UnknownRequired.Count > 0) warn("REQUIRED PATCH TARGETS UNRESOLVABLE: " + string.Join(", ", report.UnknownRequired));
 				foreach (string id in report.MissingOptional) warn("optional patch target missing: " + id);
 				return report;
 			}
@@ -214,7 +241,8 @@ namespace DriftwoodHost
 			log("Patch plan: " + report.Applied.Count + " applied, " +
 				report.MissingOptional.Count + " optional missing, " +
 				report.FailedToApply.Count + " failed, " +
-				report.Unknown.Count + " unresolvable-but-patched.");
+				report.UnknownRequired.Count + " required-unresolvable, " +
+				report.Unknown.Count + " unresolvable.");
 			foreach (string id in report.Applied) log("  applied  " + id);
 			foreach (string id in report.MissingOptional) warn("  MISSING  " + id + " (optional)");
 			foreach (string id in report.FailedToApply) warn("  FAILED   " + id);

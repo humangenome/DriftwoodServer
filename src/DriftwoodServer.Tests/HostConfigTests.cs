@@ -184,6 +184,94 @@ public class HostConfigTests : IDisposable
         Assert.Equal(6, config.MaxPlayers);
     }
 
+    // --- the review findings of 2026-08-22, each pinned ---------------------------------------
+
+    [Fact]
+    public void AConfiguredJoinPasswordRefusesTheStart()
+    {
+        // The panel wrote the customer's real passlock here, decrypted, on every start. The mod
+        // read it into a field with ZERO consumers - v1 servers are raw UDP with no join-time
+        // check - and because the key is read it never showed up as unrecognised either, so the
+        // product's own tripwire for a dead key could not see it.
+        //
+        // The panel no longer emits it. This is the other half: a re-emit must fail CLOSED and
+        // loudly rather than come up open while the panel believes the server is locked.
+        HostConfig config = Load(Minimal.Replace("[World]", "JoinPassword = hunter2\n\n[World]"));
+        Assert.Equal("hunter2", config.JoinPassword);
+        string? reason = config.Validate();
+        Assert.NotNull(reason);
+        Assert.Contains("join password", reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void NoJoinPasswordIsTheNormalCase()
+    {
+        // An EMPTY value must not refuse: the panel clearing a stale key is exactly how a
+        // passwordless server is expressed everywhere else in this family.
+        HostConfig config = Load(Minimal.Replace("[World]", "JoinPassword = \n\n[World]"));
+        Assert.Null(config.Validate());
+    }
+
+    [Fact]
+    public void AFrameCapFarBelowTheNetworkTickIsRefused()
+    {
+        // This floor lived only in the supervisor's HostOptions, and the supervisor is not what
+        // runs in production - the panel-written cfg is. So the production path had no below-tick
+        // check at all.
+        HostConfig config = Load(Minimal + "\n[Performance]\nTargetFrameRate = 10\n");
+        string? reason = config.Validate();
+        Assert.NotNull(reason);
+        Assert.Contains("tick", reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TheCapTheEndpointActuallyShipsIsAccepted()
+    {
+        // 60 is what the hosting endpoint emits. If this ever fails, every
+        // server on the fleet refuses to start.
+        HostConfig config = Load(Minimal + "\n[Performance]\nTargetFrameRate = 60\nIdleFrameRate = 5\nPauseWorldWhenEmpty = false\n");
+        Assert.Null(config.Validate());
+        Assert.Equal(60, config.TargetFrameRate);
+        Assert.Equal(5, config.IdleFrameRate);
+        Assert.False(config.PauseWorldWhenEmpty);
+    }
+
+    [Fact]
+    public void TheDensityLeversAreReadFromThePerformanceSectionTheEndpointWrites()
+    {
+        // These three had no path into production at all until 2026-08-22: the endpoint emitted an
+        // uncapped frame rate and neither of the other two. The section name is load-bearing -
+        // "Performance.IdleFrameRate" is the first alias in the group.
+        HostConfig config = Load(Minimal + "\n[Performance]\nTargetFrameRate = 60\nIdleFrameRate = 5\nPauseWorldWhenEmpty = true\n");
+        Assert.Empty(config.UnrecognisedKeys);
+        Assert.True(config.PauseWorldWhenEmpty);
+    }
+
+    [Fact]
+    public void AnIdleFrameRateOfZeroMeansOffAndAnythingElseMustStillServiceTheNetcode()
+    {
+        Assert.Null(Load(Minimal + "\n[Performance]\nIdleFrameRate = 0\n").Validate());
+        // Negative is not "off", it is a loop that never runs.
+        string? reason = Load(Minimal + "\n[Performance]\nIdleFrameRate = -1\n").Validate();
+        Assert.NotNull(reason);
+        Assert.Contains("IdleFrameRate", reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheReservedWorldNameIsRefused()
+    {
+        // Saves\local.txt is the game's own per-machine settings file. The endpoint's sanitizer
+        // used to pass "local" because it is plain letters, so a customer who renamed their world
+        // to it got a server that refused every start for a reason they never saw.
+        foreach (string name in new[] { "local", "LOCAL", "Local" })
+        {
+            HostConfig config = Load(Minimal.Replace("WorldName = Driftwood", "WorldName = " + name));
+            string? reason = config.Validate();
+            Assert.NotNull(reason);
+            Assert.Contains("local", reason, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
     public void Dispose()
     {
         try { File.Delete(_path); } catch { }

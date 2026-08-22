@@ -113,6 +113,12 @@ namespace DriftwoodHost
 				return;
 			}
 
+			// MuteAudio is consumed HERE, not at Install() time. Silence goes on before the config
+			// is read because the gap between process start and config load is exactly when FMOD
+			// finds a device and starts playing; honouring the key therefore means releasing
+			// afterwards. Read-and-never-consumed is the shape this product refuses.
+			if (!_config.MuteAudio) Silence.Release();
+
 			// The status surface comes up BEFORE anything that can refuse, so a server that will
 			// not host can still be asked WHY over HTTP instead of only leaving a file behind.
 			_readiness.Port = _config.Port;
@@ -408,6 +414,11 @@ namespace DriftwoodHost
 		{
 			_settingsApplied = true;
 			ApplyNetworkTickRate();
+			// Called HERE and nowhere else: the tick rate is only knowable once the NetworkManager
+			// exists, so this is the first moment the comparison is possible. It was defined and
+			// never called - the same defect class as the frame limiter that shipped unwired, and
+			// in the same file.
+			WarnIfCapIsBelowTheTick();
 			if (!WorldLifecycle.SetAutoSaveInterval(_config.AutoSaveMinutes))
 			{
 				Logger.LogWarning("Could not set the auto-save interval; the game's own default stays in force.");
@@ -504,11 +515,23 @@ namespace DriftwoodHost
 				_readiness.ServerStarted = InstanceFinder.NetworkManager?.IsServerStarted ?? false;
 				_readiness.LocalClientStarted = InstanceFinder.NetworkManager?.IsClientStarted ?? false;
 
+				// The limiter runs every frame and must never touch a game type, so occupancy is
+				// PUSHED to it from here - the one place that knows the difference between a
+				// transport connection and a player. Two independent counts, and the larger wins:
+				// SlotGuard's arithmetic on the transport, and the roster the game itself holds.
+				// Either alone is a single point of failure for a decision that can drop a server
+				// to 5 fps with somebody on it.
+				FrameLimiter.ObserveOccupancy(
+					Math.Max(_readiness.Players, roster.Count),
+					_readiness.LocalClientStarted);
+
 				EmptyWorldPause.Update(_readiness.WorldRunning, _readiness.Players);
 				_readiness.WorldPaused = EmptyWorldPause.Paused;
 				_readiness.LoopIdling = FrameLimiter.Idling;
 				_readiness.IdleTransitions = FrameLimiter.IdleTransitions;
 				_readiness.WorldResumeCount = EmptyWorldPause.ResumeCount;
+				_readiness.WorldSavesOnPause = EmptyWorldPause.SavesOnPause;
+				_readiness.WorldSaveOnPauseFailures = EmptyWorldPause.FailedSavesOnPause;
 			}
 			catch (Exception exception)
 			{
@@ -605,19 +628,84 @@ namespace DriftwoodHost
 
 		// One plain sentence, readable by a support person who has never seen the code, written
 		// where the supervisor and the panel will both find it.
+		//
+		// A refusal is TERMINAL and the process ENDS. It did not used to, and after the port had
+		// already been bound - a world-load timeout is the reachable case - that left the process
+		// alive running the menu scene with the socket closed. Uncapped that is most of a core,
+		// and the supervisor's steady loop only checked whether the process existed, so the zombie
+		// burned until the next panel action. There is nothing for a refused host to do: the
+		// reason is on disk in host-ready.json, the panel reads it from there, and relaunching
+		// would refuse again for the same reason.
 		private void Refuse(string reason)
 		{
 			Logger.LogError("DRIFTWOOD WILL NOT HOST: " + reason);
-			if (_readiness == null) return;
-			_readiness.Phase = HostPhase.WillNotHost;
-			_readiness.Reason = reason;
-			_readiness.BootAssertionsPassed = false;
-			_readiness.ServerStarted = false;
-			_readiness.LocalClientStarted = false;
-			_readiness.WorldObjectPresent = false;
-			_readiness.IslandLoaded = false;
-			_readiness.Players = 0;
-			_readiness.Write();
+			if (_readiness != null)
+			{
+				_readiness.Phase = HostPhase.WillNotHost;
+				_readiness.Reason = reason;
+				_readiness.BootAssertionsPassed = false;
+				_readiness.ServerStarted = false;
+				_readiness.LocalClientStarted = false;
+				_readiness.WorldObjectPresent = false;
+				_readiness.IslandLoaded = false;
+				// UNKNOWN, not zero. Zero is what marks a server EMPTY, and an empty server gets
+				// reaped; this file states that rule two hundred lines up and then broke it here.
+				// Wire-safe by accident today (the HTTP layer recomputes -1 when the world is not
+				// running) but a rule that only holds because something downstream re-derives it
+				// is not a rule.
+				_readiness.Players = HostHttpApi.UnknownPlayers;
+				_readiness.SetRoster(new List<string>());
+				try { _readiness.Write(); } catch (Exception exception) { Logger.LogWarning("Refusal readiness write failed: " + exception.Message); }
+			}
+
+			// Close anything already open before leaving, so a refusal never leaves a bound port
+			// behind it, and restore the world clock so nothing inherits a frozen one. The
+			// GAMEPLAY port closes immediately - that is the half a player could otherwise
+			// connect to - while the status API stays up for the grace window below.
+			_stopping = true;
+			try { EmptyWorldPause.ForceResume(); } catch { }
+			try { CloseTransport(); } catch (Exception exception) { Logger.LogWarning("Refusal transport close failed: " + exception.Message); }
+
+			try { StartCoroutine(QuitAfterRefusal()); }
+			catch (Exception exception)
+			{
+				// If a coroutine cannot even be started, do not stay alive to think about it.
+				Logger.LogError("Could not schedule the post-refusal shutdown (" + exception.Message + "); quitting now.");
+				HardExit();
+			}
+		}
+
+		// Seconds a refused host keeps its STATUS port open before ending the process.
+		//
+		// Not zero, on purpose. The status API is deliberately brought up before anything that
+		// can refuse, so a host that will not host can still be ASKED why rather than only
+		// leaving a file behind - and the supervisor polls that endpoint every 10 seconds and
+		// stops a refused host cleanly when it sees WillNotHost. Quitting instantly would take
+		// that channel away and turn every refusal into three blind relaunch attempts.
+		//
+		// So: close the gameplay port at once, answer "why" for one supervisor poll interval with
+		// margin, then end. Either the supervisor stops us first or this does.
+		private const float RefusalGraceSeconds = 25f;
+
+		private IEnumerator QuitAfterRefusal()
+		{
+			yield return new WaitForSecondsRealtime(RefusalGraceSeconds);
+			Logger.LogError("DRIFTWOOD WILL NOT HOST: ending the process. Leaving it alive would run the menu scene for nothing, which on an uncapped loop is most of a core.");
+			try { _api?.Dispose(); } catch { }
+			Application.Quit(1);
+			// Application.Quit is a REQUEST - it takes effect at the end of the frame and a
+			// batch-mode player with a stuck scene load has been seen to ignore it. This is the
+			// zombie this whole path exists to remove, so it does not get to survive a polite
+			// request.
+			yield return new WaitForSecondsRealtime(15f);
+			Logger.LogError("The process did not end after Application.Quit; forcing it.");
+			HardExit();
+		}
+
+		private static void HardExit()
+		{
+			try { System.Diagnostics.Process.GetCurrentProcess().Kill(); }
+			catch (Exception exception) { Plugin.Log?.LogError("Could not force the process to exit: " + exception.Message); }
 		}
 
 		private static void TryDelete(string path)

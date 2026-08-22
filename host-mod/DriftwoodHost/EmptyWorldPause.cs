@@ -26,8 +26,12 @@ namespace DriftwoodHost
 	// can turn it off without a rebuild.
 	//
 	// Known consequences, none of which are silent:
-	//   - Coroutines on WaitForSeconds stall, including the game's AutoSaver. An empty world has
-	//     nothing to save, and the world resumes before anyone can change it.
+	//   - Coroutines on WaitForSeconds stall, including the game's AutoSaver. THE WORLD IS SAVED
+	//     ON THE WAY IN, and it has to be: "an empty world has nothing to save" is true of the
+	//     paused state and false of the window ENTERING it. The last player leaves at T+4:30 of a
+	//     5:00 autosave interval, the clock stops, and those 4:30 of changes stay dirty in memory
+	//     indefinitely - until a crash, a host reboot or a force-kill days later loses the final
+	//     minutes of the last session anyone played. So Pause() flushes first.
 	//   - Time.time stops advancing, so SaveManager's playtime does not accrue while empty. That is
 	//     arguably more correct than the alternative, but it IS a behaviour change.
 	//   - Update() still runs with a zero delta, so this does not reach the Update bucket - only
@@ -61,11 +65,36 @@ namespace DriftwoodHost
 			if (!Paused) Pause();
 		}
 
+		internal static int SavesOnPause { get; private set; }
+		internal static int FailedSavesOnPause { get; private set; }
+
 		private static void Pause()
 		{
+			// FLUSH BEFORE THE CLOCK STOPS, and in this order. The game's AutoSaver runs on scaled
+			// time, so timeScale = 0 stalls it: whatever happened since the last autosave would
+			// sit dirty in memory for as long as the server stays empty, which is most of its
+			// life. Once a frame, once per emptying - not a cost that recurs.
+			try
+			{
+				if (WorldLifecycle.SaveNow())
+				{
+					SavesOnPause++;
+				}
+				else
+				{
+					FailedSavesOnPause++;
+					Plugin.Log?.LogWarning("Could not save the world before pausing it. The last session's changes since the previous autosave are still only in memory.");
+				}
+			}
+			catch (System.Exception exception)
+			{
+				FailedSavesOnPause++;
+				Plugin.Log?.LogWarning("Saving before the pause threw (" + exception.GetType().Name + ": " + exception.Message + ").");
+			}
+
 			Time.timeScale = 0f;
 			Paused = true;
-			Plugin.Log?.LogInfo("World paused: nobody is connected. The network layer keeps running, so this server is still joinable.");
+			Plugin.Log?.LogInfo("World saved and paused: nobody is connected. The network layer keeps running, so this server is still joinable.");
 		}
 
 		private static void Resume()

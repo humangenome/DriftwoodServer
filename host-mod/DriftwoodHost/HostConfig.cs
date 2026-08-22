@@ -116,6 +116,9 @@ namespace DriftwoodHost
 				"Server.ServerName", "Server.Name", "ServerName", "HostName");
 			// The JOIN password. Distinct from the API token below - they are different secrets and
 			// they live in different sections.
+			//
+			// STILL READ, DELIBERATELY, AND NOTHING CONSUMES IT. Validate() refuses to start when
+			// it is set. See the refusal there for why a dead key is kept rather than deleted.
 			config.JoinPassword = config.String(config.JoinPassword,
 				"Server.JoinPassword", "Server.Password", "JoinPassword");
 			// The API token for every mutating HTTP route. "[Http] Password" is its canonical
@@ -340,6 +343,22 @@ namespace DriftwoodHost
 				return "WorldName cannot be \"local\" - the game reserves that name for the per-machine settings file and would overwrite it.";
 			if (WorldName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
 				return "WorldName contains characters that cannot be used in a file name.";
+			// A CONFIGURED JOIN PASSWORD IS A REFUSAL, because nothing enforces it.
+			//
+			// v1 servers are raw UDP with no join-time password check anywhere in this mod. The
+			// panel used to write the customer's real passlock into this key on every start; the
+			// mod read it into a field with zero consumers, and because the key IS read, it never
+			// appeared in unrecognisedConfigKeys either - so the product's own tripwire for
+			// exactly this was blind to it. The panel no longer emits it.
+			//
+			// The key is kept and refused rather than deleted, on purpose. Deleting it would make
+			// a future re-emit merely UNRECOGNISED - a warning line in a log nobody reads, on a
+			// server that comes up open while the panel believes it is locked. Refusing means the
+			// day anybody wires a password field, they find out immediately and from the right
+			// side. Remove this refusal in the same commit that adds the enforcement, never
+			// before.
+			if (!string.IsNullOrEmpty(JoinPassword))
+				return "A join password is configured, but this server has no way to enforce one - v1 hosts accept any client that knows the address. Refusing to start rather than advertising a lock that is not there.";
 			// REQUIRED, not optional. Unity's persistentDataPath is per Windows USER, not per
 			// instance, and no launch flag moves it - so an unset SaveRoot means every server on
 			// this machine reads and writes ONE save directory and quietly overwrites each other's
@@ -354,6 +373,14 @@ namespace DriftwoodHost
 				return "WorldReadyTimeoutSeconds is outside the supported range of 30 to 1800.";
 			if (TargetFrameRate < 0 || TargetFrameRate > 1000)
 				return "TargetFrameRate is outside the supported range of 0 to 1000.";
+			// The floor the supervisor's HostOptions has always carried and the mod did not, so in
+			// production - where the panel-written cfg is the only config that runs - there was no
+			// below-tick check at all. This game's netcode ticks at 50 Hz; a cap far under that
+			// makes the server run several ticks in one frame and batch every send, which in a
+			// game whose entire feel is objects moving is a smoothness regression bought with
+			// CPU. Below 20 that stops being a trade and starts being a broken server.
+			if (TargetFrameRate > 0 && TargetFrameRate < 20)
+				return "TargetFrameRate " + TargetFrameRate + " is far below this game's network tick rate, so the server would batch every send and objects would move in steps. Use 20 or more, or lower NetworkTickRate to match and record why.";
 			if (IdleFrameRate != 0 && (IdleFrameRate < 1 || IdleFrameRate > 1000))
 				return "IdleFrameRate is outside the supported range of 1 to 1000; it cannot be zero because the netcode is serviced inside the same loop and a frozen loop could never accept a join.";
 			if (PhysicsStepSeconds != 0f && (PhysicsStepSeconds < 0.01f || PhysicsStepSeconds > 0.1f))
