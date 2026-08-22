@@ -11,10 +11,26 @@ Start-Sleep -Seconds 3
 & C:\deploy.ps1 -Instance 1 -Slots 8 -Fps 30 -World 'PersistProof' | Out-Null
 Remove-Item "$dst\Saves\PersistProof.txt" -Force -EA SilentlyContinue
 
+# hex(HMACSHA256(sha256(token), "METHOD`n<path>`n<ts>`n<sha256hex(body)>")) - the key is the RAW
+# 32-byte digest of the token, not its hex text.
+function DriftwoodSignedHeaders([string]$method, [string]$path, [string]$body, [string]$token) {
+  $ts = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+  $sha = [System.Security.Cryptography.SHA256]::Create()
+  $bodyHash = ($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($body)) | ForEach-Object { $_.ToString('x2') }) -join ''
+  $key = $sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($token))
+  $canonical = "$($method.ToUpper())`n$path`n$ts`n$bodyHash"
+  $hmac = New-Object System.Security.Cryptography.HMACSHA256(,$key)
+  $sig = ($hmac.ComputeHash([Text.Encoding]::UTF8.GetBytes($canonical)) | ForEach-Object { $_.ToString('x2') }) -join ''
+  return @{ 'X-Driftwood-Timestamp' = "$ts"; 'X-Driftwood-Signature' = $sig }
+}
+
 function BootAndSave($label) {
   $p = Start-Process -FilePath "$dst\DriftBench.exe" -WorkingDirectory $dst -ArgumentList '-batchmode','-nographics','-logFile',"$dst\unity.log" -PassThru
   Start-Sleep -Seconds 80
-  try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:22004/api/v1/save' -Method POST -Headers @{'X-Driftwood-Auth'='benchtoken1'} -UseBasicParsing -TimeoutSec 25; Say ("$label save -> " + $r.Content) } catch { Say ("$label save FAILED: " + $_.Exception.Message) }
+  # HMAC, the one scheme the host API accepts. The static X-Driftwood-Auth header this rig
+  # used to send is gone; a rig that still sent it would 401 and read as "the save failed",
+  # which on a PERSISTENCE bench is the most misleading possible false negative.
+  try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:22004/api/v1/save' -Method POST -Headers (DriftwoodSignedHeaders 'POST' '/api/v1/save' '' 'benchtoken1') -UseBasicParsing -TimeoutSec 25; Say ("$label save -> " + $r.Content) } catch { Say ("$label save FAILED: " + $_.Exception.Message) }
   Start-Sleep -Seconds 5
   $f = "$dst\Saves\PersistProof.txt"
   if (Test-Path $f) {

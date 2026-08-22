@@ -1,61 +1,181 @@
 # Host HTTP API
 
-Served by the host mod on **gameplay port + 1**, TCP. This game runs as no Steam game server at
-all, so there is **no A2S responder and no query port**; this endpoint is the A2S replacement and
-the panel's query companion is its intended caller.
+Served by the host mod (`DriftwoodHost`) on **gameplay port + 1**, TCP, bound to `0.0.0.0`.
 
-## Auth
+This game runs as no Steam game server at all, so there is **no A2S responder and no query port**.
+This endpoint is the A2S replacement *and* the only thing a player's Driftwood launcher can ask
+whether a server is up.
 
-| Route | Auth |
-|---|---|
-| `GET /api/v1/status` | **None, by design.** It exposes nothing secret, and the firewall scopes the port to loopback and the web server. |
-| `POST /api/v1/save` | `X-Driftwood-Auth: <token>`, compared in constant time. |
+It is written on a raw `TcpListener`, not `HttpListener`. An `HttpListener` wildcard prefix needs a
+URL ACL and throws without one; the previous implementation caught that and fell back to a
+loopback-only prefix, logging success. On a port that faces players, that fallback is invisible and
+total — every launcher reads Offline while the panel, on loopback, sees a perfectly healthy host.
 
-**Every mutating route requires the header.** Do not relax the firewall on the assumption that the
-API authenticates — half of it deliberately does not.
+## Two audiences, and that is the whole design
 
-## `GET /api/v1/status` -> `200`
+| audience | reaches it from | routes |
+|---|---|---|
+| the hosting panel and the supervisor | `127.0.0.1` | `/status`, `/save` |
+| the player's Driftwood launcher | the open internet | `/health`, `/players`, `/manifest`, `/console`, `/snapshots*` |
+
+**A SteamID64 never leaves the box unauthenticated.** `/status` publishes the roster as
+`"<steamid64>:<name>"` and is **loopback-only** unless the caller signs. `/players` publishes names
+and connect durations and nothing else. They are two payloads built by two serializers, not one
+payload behind a flag — a flag can be wrong; a serializer that never receives the id cannot leak it.
+
+## Auth: HMAC, and only HMAC
+
+```
+X-Driftwood-Timestamp: <unix seconds>
+X-Driftwood-Signature: hex(HMACSHA256(sha256(AuthToken), "METHOD\n<path>\n<ts>\n<sha256hex(body)>"))
+```
+
+- The HMAC **key is the raw 32-byte sha256 digest** of `AuthToken`, not its hex text.
+- `<path>` is the URL path only — no host, no query string.
+- Signatures older or newer than **300 seconds** are refused, and each signature is accepted **once**
+  (replay guard). Without that, anyone who captured one `restore` request could roll a world back.
+- `AuthToken` is the server's `passrcon`, written by the panel into `[Server] AuthToken`. An empty
+  token makes every signed route refuse — fail-closed, and logged loudly at boot.
+
+There used to be a second scheme here, a static token in `X-Driftwood-Auth`, while the launcher
+signed every request the way the rest of the family signs them. Two schemes on one API is how one of
+them ends up unimplemented, and that is exactly what had happened: the launcher's console and its
+snapshot buttons could not have authenticated to a Driftwood host at all. **The static header is
+gone.** Every caller signs — the hosting endpoint, the launcher
+(`DriftwoodHttpClient.BuildSignedRequest`), the bench rig, and the .NET supervisor.
+
+## Route table
+
+| route | auth | notes |
+|---|---|---|
+| `GET /api/v1/health` | none | **200 only when the world is running**, else 503 |
+| `GET /api/v1/players` | none | names + durations, no ids |
+| `GET /api/v1/manifest` | none | the server's real loaded plugin set |
+| `GET /api/v1/status` | loopback, or signed | the panel document, ids included |
+| `POST /api/v1/save` | loopback, or signed | flush the world now |
+| `POST /api/v1/console` | signed | one host command |
+| `GET /api/v1/snapshots` | signed | list |
+| `POST /api/v1/snapshots` | signed | save, then archive |
+| `GET /api/v1/snapshots/{id}/download` | signed | zip + `X-Driftwood-Sha256` |
+| `POST /api/v1/snapshots/{id}/restore` | signed | replaces the world, then ends the process |
+| `POST /api/v1/snapshots/import-restore` | signed | uploaded zip, same as above |
+
+A trailing slash is not a different route. There is no default tier: a path that matches no row is
+404, never "allowed because nobody said otherwise".
+
+## `GET /api/v1/health`
 
 ```json
 {
-  "players": 0,
-  "gameVersion": "1.0.4",
-  "pluginVersion": "0.1.0",
-  "phase": "Hosting",
-  "reason": "Hosting \"Driftwood\" on port 22003",
-  "worldRunning": true,
-  "bootAssertionsPassed": true,
-  "port": 22003,
-  "slots": 8,
-  "world": "Driftwood",
-  "roster": []
+  "ok": true,
+  "instance": "Driftwood",
+  "server_name": "Bob's island",
+  "driftwood_version": "0.1.0",
+  "driftwood_build": "1.0.4",
+  "gameplay_port": 22003,
+  "max_players": 8,
+  "player_count": 0,
+  "password_protected": false,
+  "phase": "Hosting"
 }
 ```
 
-### `players`: the unknown-versus-zero rule
+**200 only when a player could actually join.** A server still loading, or wedged, answers `503`
+with the same body and `ok: false`. Answering 200 for it would put an Online badge on a server
+nobody can get into.
 
-**`-1` means UNKNOWN. It is never coerced to `0`.**
+The consequence worth stating: because a 200 means the world is running, `player_count` on a 200 is
+always a real number. The `-1` unknown sentinel belongs to `/status`, whose callers reap empty
+servers and must be able to tell empty from unknown.
 
-Zero is what marks a server empty, and an empty server gets reaped. A server that is still loading,
-wedged, or whose world is not running has an *unknown* population, not an empty one, and reporting
-zero for it hands the empty-server reaper a live customer.
+`driftwood_version` is the launcher's liveness proof — it treats an absent or empty value as
+Offline — so that field is never blank. `password_protected` is always `false`: the panel emits no
+join password and `HostConfig.Validate()` refuses to start when one is configured, so publishing
+`false` explicitly keeps the launcher's pre-flight prompt off rather than leaving it on "unknown".
 
-- `worldRunning: true` -> `players` is the real count, and `0` is then an honest answer.
-- anything else -> `players` is `-1`.
+## `GET /api/v1/players`
 
-Callers must propagate unknown as unknown. `stopempty.php` already initialises its own count to
-`-1` and skips unknown explicitly; anything new must do the same.
+```json
+{ "instance": "Driftwood", "count": 1,
+  "players": [ { "name": "Steve", "connected_seconds": 412, "ping_ms": 38 } ] }
+```
 
-### `gameVersion`
+The same facts an A2S player query publishes for every other game on this fleet. `ping_ms` is
+**absent**, not zero, when this build of FishNet exposes no per-connection round-trip time — the
+launcher renders the row without it, and a fabricated number would be worse than a missing one.
+Empty while the world is not running, because a population that is unknown is not a roster.
 
-Truncated to 45 characters, because `gameservers.reported_version` is `varchar(45)` and truncates
-silently **on the way in**, where the version cron's detector cannot see that it happened.
+## `GET /api/v1/manifest`
 
-## `POST /api/v1/save` -> `200 {"saved": true}`
+```json
+{ "manifest_version": 1, "instance": "Driftwood", "driftwood_version": "0.1.0",
+  "generated_unix": 1755900000,
+  "server_mods": [ { "id": "com.humangenome.driftwood.host", "name": "Driftwood Host",
+                     "version": "0.1.0", "ours": true } ],
+  "required": [], "recommended": [], "blocked": [] }
+```
 
-Runs the game's own save routine synchronously and answers when it has run. `401` without a valid
-token, `405` on a non-POST, `500` if the save routine could not be invoked.
+Public on purpose: a player needs to know what a server runs *before* they hold any credential for
+it. `server_mods` is read from BepInEx's own chainloader, so it names what is actually loaded rather
+than what happens to be on disk. The curated lists are empty on a hosted instance because
+this product ships no mod picker for this game; the launcher hides an empty curated section rather
+than rendering a card that apologises for itself.
 
-**Stop and restart must call save, then snapshot, in that order.** A forced kill skips the game's
-own quit-time save entirely, and a snapshot taken before the flush captures the stale file the
-flush was meant to replace — silently, with a valid-looking archive.
+## `POST /api/v1/console`
+
+Request `{"command": "status"}`, reply `{"ok": true, "output": "..."}`.
+
+A refused or unknown command answers **200 with `ok: false`** and an output line saying why, so the
+console prints a reason instead of an HTTP status.
+
+**This is a HOST console, not a game console.** The shipped How to Fish build has no admin concept,
+no ban list and no server console — its cheat commands are local and client-side. So the command set
+is what the host process genuinely knows or can genuinely do:
+
+```
+help  status  players  version  world  save  snapshot  snapshots
+```
+
+`stop`, `restart`, `kick`, `ban`, `say` and friends are **named refusals**: they answer with where
+that thing actually lives rather than with "unknown command", which would read as a typo. Lifecycle
+is deliberately absent — the panel's stop and restart flush the world and take a backup first, and a
+console shortcut past that ordering would be a data-safety regression dressed as a convenience.
+
+## `GET|POST /api/v1/snapshots...`
+
+A snapshot is a zip of the server's save directory, kept in `<instance root>\Snapshots` — beside
+`Logs\` and outside the game tree SteamCMD owns, so a validate cannot take a customer's backups.
+The newest 20 are kept.
+
+- `GET /api/v1/snapshots` → `{"snapshots":[{"id","taken_unix","size_bytes","sha256"}]}`
+- `POST /api/v1/snapshots` → `{"snapshot":{"id":"..."}}`. **Flushes the world first and refuses if
+  the flush fails.** A snapshot taken before the flush captures the file the flush was about to
+  replace — a valid-looking archive of stale data, which is the worst failure a backup can have
+  because it only shows up when it is restored.
+- `GET /api/v1/snapshots/{id}/download` → the zip, with `X-Driftwood-Sha256`.
+- `POST /api/v1/snapshots/{id}/restore` and `POST /api/v1/snapshots/import-restore`:
+  1. snapshot what is there now, so a restore is never a one-way door;
+  2. extract into a staging directory, so a corrupt archive cannot half-replace a live world;
+  3. reconcile the world **name** (below);
+  4. swap the staged tree in;
+  5. answer `{"ok":true}`, **then end the process** so the supervisor brings the world back on the
+     restored save.
+
+**The world-name trap.** The world a server loads is `Saves\<WorldName>.txt` and `WorldName` comes
+from the panel, not from the archive. Restore somebody's `MyIsland.txt` onto a server configured for
+`Driftwood` and the files land, the server starts, finds no `Driftwood.txt`, **creates an empty
+one** — and the customer is looking at a brand new world having just been told the restore
+succeeded. A single world file in the archive is renamed to the configured name; several, and none
+matching, is a refusal with a sentence saying so.
+
+**Zip slip.** Entry names are attacker-controlled — the launcher lets a player upload any zip. Every
+entry is flattened to a basename and re-resolved against the destination, and anything that lands
+outside it refuses the whole archive.
+
+## The supervisor dependency, stated plainly
+
+Restore needs the process to end and be brought back. Both candidate supervisors (the inline
+PowerShell loop that runs in production today, and the unshipped .NET `DriftwoodServer`) relaunch a
+host that exits — that is what a supervisor is — so the dependency is on the property, not on which
+one wins. **Everything else in this API is independent of the open S1 question**, which is why the
+API lives in the mod: the mod is the component that is definitely on the fleet.

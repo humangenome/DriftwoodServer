@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Security.Cryptography;
 using System.IO.Compression;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -101,7 +103,20 @@ internal sealed class SaveSnapshot
             {
                 Content = new StringContent(string.Empty, Encoding.UTF8, new MediaTypeHeaderValue("application/json"))
             };
-            request.Headers.Add("X-Driftwood-Auth", authToken);
+            // HMAC, not a bearer token. The host mod accepts exactly one scheme (the family's:
+            // hex(HMACSHA256(sha256(token), "METHOD\npath\nts\nsha256hex(body)"))), and the static
+            // X-Driftwood-Auth header it used to also accept is gone. This component is
+            // unshipped today (review item S1), so nothing broke - but a shutdown save that
+            // silently 401s is precisely the failure this API is built to make impossible, and
+            // leaving a dead scheme here would hand it to whoever ships this next.
+            long timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            string bodySha = Convert.ToHexString(SHA256.HashData(Array.Empty<byte>())).ToLowerInvariant();
+            string canonical = $"POST\n/api/v1/save\n{timestamp}\n{bodySha}";
+            string signature = Convert.ToHexString(HMACSHA256.HashData(
+                SHA256.HashData(Encoding.UTF8.GetBytes(authToken)),
+                Encoding.UTF8.GetBytes(canonical))).ToLowerInvariant();
+            request.Headers.Add("X-Driftwood-Timestamp", timestamp.ToString(CultureInfo.InvariantCulture));
+            request.Headers.Add("X-Driftwood-Signature", signature);
             using HttpResponseMessage response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
             return response.IsSuccessStatusCode;
         }

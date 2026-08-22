@@ -16,6 +16,13 @@
          file where a cross-lane key-name disagreement turns into a server running on defaults, so
          it is worth testing on its own. Linked rather than duplicated. -->
     <Compile Include="../../host-mod/DriftwoodHost/HostConfig.cs" Link="Linked/HostConfig.cs" />
+    <!-- The API signature, for the same reason and a sharper one. Three codebases have to
+         compute it identically - this server, the Driftwood launcher and the hosting endpoint -
+         and a mismatch has NO SYMPTOM: every signature is well-formed and none of them verify,
+         which presents as "the console cannot connect" with nothing in any log. It has no Unity
+         or BepInEx dependency either, so it can be pinned here to a golden vector whose other
+         half lives in the hosting endpoint's own test. -->
+    <Compile Include="../../host-mod/DriftwoodHost/ApiSignature.cs" Link="Linked/ApiSignature.cs" />
   </ItemGroup>
   <PropertyGroup>
     <NoWarn>$(NoWarn);CS8618;CS8600;CS8601;CS8602;CS8603;CS8604;CS8625</NoWarn>

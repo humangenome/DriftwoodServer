@@ -25,6 +25,12 @@ All notable changes to DriftwoodServer are recorded here.
 - `DriftwoodServer`, the .NET 8 supervisor: build pin verification against the game's own code and
   Steam's install record, process and log ownership, readiness consumption, a health endpoint, and
   save-then-snapshot backups.
+- The launcher-facing half of the host API: `/health` (online state, server name, player and slot
+  counts), `/players` (who is connected and for how long), `/manifest` (the server's real loaded
+  plugin set), `/console` (a host console: status, players, world, save, snapshots) and
+  `/snapshots` (list, take, download, restore, and import a save from a file). This game runs as no
+  Steam game server, so nothing answers a Source query anywhere and these routes are the query
+  surface a join tool has to use.
 
 ### Changed
 
@@ -53,6 +59,22 @@ All notable changes to DriftwoodServer are recorded here.
 - A configured join password refuses the start. Nothing enforces one - these hosts accept any
   client that knows the address - so a server with a password set would have come up open while
   the panel believed it was locked.
+- One authentication scheme on the API, and it is the family's HMAC signature over
+  `METHOD\npath\ntimestamp\nsha256(body)`, keyed by the sha256 digest of the API token, with a
+  five-minute window and a replay guard. The static bearer token it also used to accept is gone:
+  two schemes on one API is how one of them ends up unimplemented, which is what had happened -
+  a join tool signing every request could not have authenticated to this server at all.
+- Every route states its audience in a route table the dispatcher reads, and there is no default:
+  a path that matches no row is refused rather than allowed because nobody said otherwise. Player
+  identifiers are published only on the loopback status route, never on the public one, and the
+  two payloads are built by different code rather than by one payload behind a flag.
+- The API listens on a plain socket rather than through the operating system's HTTP stack, which
+  needs a registered URL reservation for anything but loopback. Without one, the old listener
+  caught the failure and quietly fell back to loopback - reporting success - which on a port that
+  faces players is invisible and total.
+- Requests that touch the game are run on the game's own thread instead of on the listener's.
+  Saving the world from a background thread is an exception on a busy machine and silence on a
+  quiet one, and it is the one call whose failure loses somebody's world.
 
 ### Fixed
 

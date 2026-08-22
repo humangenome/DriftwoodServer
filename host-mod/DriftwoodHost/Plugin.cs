@@ -125,7 +125,7 @@ namespace DriftwoodHost
 			_readiness.Slots = _config.MaxPlayers;
 			_readiness.WorldName = _config.WorldName;
 			_readiness.EffectiveBindAddress = _config.BindAddress;
-			_api = new HostHttpApi(_config.EffectiveHttpPort, _readiness, _config.AuthToken, WorldLifecycle.SaveNow);
+			_api = new HostHttpApi(_config, _readiness);
 			if (!_api.Start())
 			{
 				// The panel decides whether this server is up by asking this endpoint. Hosting
@@ -158,6 +158,12 @@ namespace DriftwoodHost
 			// The panel asserts on this. It names what the mod ACTUALLY resolved, not what it was
 			// asked for, and it lives outside the customer's FTP jail so it cannot be forged.
 			BootMarkers.WriteSaveRoot(_readiness.SaveDirectory);
+
+			// World snapshots live under the INSTANCE root, beside Logs\ and outside the game
+			// tree SteamCMD owns, so a validate cannot take a customer's backups. Initialised
+			// here because this is the first moment both halves - the resolved save directory
+			// and the world name - are known.
+			SnapshotStore.Initialise(_readiness.SaveDirectory, instanceRoot, _config.WorldName);
 
 			GhostHost.Suppress = _config.SuppressGhostHost;
 			EmptyWorldPause.Enabled = _config.PauseWorldWhenEmpty;
@@ -432,6 +438,11 @@ namespace DriftwoodHost
 		private void Update()
 		{
 			_frames.Sample(Time.unscaledDeltaTime);
+			// Drain anything the HTTP API asked the game to do. Every Unity call the API makes
+			// - saving the world, taking a snapshot, quitting after a restore - is queued to
+			// here rather than run on a listener thread, because touching a Unity object off
+			// the main thread is an exception on a busy box and silence on a quiet one.
+			MainThread.Pump();
 		}
 
 		// The netcode tick is also wall-clock driven and also invisible to a frame cap. It can only
@@ -500,7 +511,14 @@ namespace DriftwoodHost
 				// The real roster. Names come from our own map when the client supplied one and
 				// from an obviously-synthetic placeholder otherwise - never from a guess that
 				// could pass for somebody's actual handle.
-				List<string> roster = new List<string>();
+				//
+				// Pushed into PlayerDirectory rather than formatted here, because there are now
+				// TWO consumers with different rights: the panel's /status (ids included) and
+				// the public /players (names and durations only). One place builds both, and the
+				// public one never receives an id to leak.
+				List<ulong> rosterIds = new List<ulong>();
+				List<string> rosterNames = new List<string>();
+				List<object> rosterConnections = new List<object>();
 				if (PlayerManager.Players != null)
 				{
 					foreach (Player player in PlayerManager.Players)
@@ -508,9 +526,13 @@ namespace DriftwoodHost
 						if (player == null) continue;
 						ulong steamId = player.SteamID;
 						if (steamId == DriftwoodIdentity.HostSteamId) continue;
-						roster.Add(steamId.ToString() + ":" + (player.SteamName ?? DriftwoodIdentity.Placeholder(steamId)));
+						rosterIds.Add(steamId);
+						rosterNames.Add(player.SteamName ?? DriftwoodIdentity.Placeholder(steamId));
+						rosterConnections.Add(null);
 					}
 				}
+				PlayerDirectory.Observe(rosterIds, rosterNames, rosterConnections);
+				List<string> roster = PlayerDirectory.IdentifiedRoster();
 				_readiness.SetRoster(roster);
 				_readiness.ServerStarted = InstanceFinder.NetworkManager?.IsServerStarted ?? false;
 				_readiness.LocalClientStarted = InstanceFinder.NetworkManager?.IsClientStarted ?? false;
@@ -603,6 +625,7 @@ namespace DriftwoodHost
 				// The world is down, so the population is UNKNOWN rather than zero - a stopped
 				// server must never look like a running-but-empty one to the reaper.
 				_readiness.Players = HostHttpApi.UnknownPlayers;
+				PlayerDirectory.Clear();
 				_readiness.SetRoster(new List<string>());
 				try { _readiness.Write(); } catch (Exception exception) { Logger.LogWarning("Final readiness write failed: " + exception.Message); }
 
@@ -654,6 +677,7 @@ namespace DriftwoodHost
 				// running) but a rule that only holds because something downstream re-derives it
 				// is not a rule.
 				_readiness.Players = HostHttpApi.UnknownPlayers;
+				PlayerDirectory.Clear();
 				_readiness.SetRoster(new List<string>());
 				try { _readiness.Write(); } catch (Exception exception) { Logger.LogWarning("Refusal readiness write failed: " + exception.Message); }
 			}

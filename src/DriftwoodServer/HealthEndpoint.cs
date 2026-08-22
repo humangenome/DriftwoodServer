@@ -11,6 +11,24 @@ namespace DriftwoodServer;
 // it. This endpoint exists so that never applies here. It is loopback-only by default, needs no
 // authentication because it exposes nothing secret, and answers the three questions the panel and
 // the launcher actually ask: is it up, is the world running, and is it full.
+//
+// >>> PORT + 1 IS THE HOST MOD'S, AND THIS COMPONENT MUST BE GIVEN ITS OWN PORT BEFORE IT SHIPS.
+//
+// As of 2026-08-22 the launcher-facing API (/health, /players, /manifest, /console, /snapshots)
+// lives in DriftwoodHost, the BepInEx plugin, and binds 0.0.0.0:<game port + 1> on a raw
+// TcpListener. It was put there deliberately: which supervisor is the product is an OPEN question
+// (review item S1 - production runs an inline PowerShell loop and this project is not packaged at
+// all), and a customer-visible feature must not depend on a decision nobody has taken.
+//
+// PluginConfigWriter hands the plugin the same HttpPort this class is constructed with, and the
+// example config pins both to 22004. If this ever runs alongside the plugin on that number, the
+// second bind fails - loudly now rather than silently, because the plugin holds the port with a
+// wildcard TcpListener rather than an http.sys prefix that could be out-ranked. Give this its own
+// port (the +2..+9 band is reserved and empty) or do not run it.
+//
+// It also answers a DIFFERENT shape from the one the launcher parses: "players"/"slots" here
+// versus "player_count"/"max_players" on the mod's /health. Nothing consumes this one today; if it
+// ever faces a launcher, it has to speak the mod's shape, not its own.
 internal sealed class HealthEndpoint : IDisposable
 {
     private readonly HttpListener _listener = new();
