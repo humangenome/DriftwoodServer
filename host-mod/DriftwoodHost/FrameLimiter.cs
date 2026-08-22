@@ -88,6 +88,26 @@ namespace DriftwoodHost
 
 		private void LateUpdate()
 		{
+			// SAFETY NET for the empty-world freeze. That freeze is applied and released from the
+			// readiness sampler, which lives in a coroutine - and a coroutine that dies leaves the
+			// world stopped with the port still open and the last status file still saying
+			// "Hosting". That is a fail-OPEN: a server that looks up and is frozen solid.
+			//
+			// LateUpdate runs every frame regardless of timeScale, so this is the one place that
+			// cannot stop running. If the clock is stopped while a real client is connected, put it
+			// back - whatever the reason.
+			if (Time.timeScale == 0f)
+			{
+				int connected;
+				try { connected = InstanceFinder.ServerManager?.Clients?.Count ?? 0; } catch { connected = 0; }
+				if (connected > 1)
+				{
+					Time.timeScale = 1f;
+					EmptyWorldPause.ForceResume();
+					Plugin.Log?.LogWarning("The world clock was stopped while a player was connected. Restored it. Something that should have resumed the world did not.");
+				}
+			}
+
 			int target = CurrentTarget();
 			if (target <= 0) return;
 			double period = 1000.0 / target;
