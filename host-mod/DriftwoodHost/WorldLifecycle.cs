@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using HarmonyLib;
@@ -74,8 +75,79 @@ namespace DriftwoodHost
 			return null;
 		}
 
+		// Parameters the game added to a method we call that we did not know about, named so the
+		// drift is visible in the readiness document instead of only in a log line nobody reads.
+		internal static readonly List<string> GameApiDrift = new List<string>();
+
+		// THE ARGUMENT LIST IS BUILT FROM THE METHOD THE GAME ACTUALLY SHIPPED, never hard-coded.
+		//
+		// This is not defensive decoration. Retail 1.0.5 added a third parameter to
+		// SaveManager.CreateServer (string serverName, bool useSteam, BOOL ISPUBLIC), and the
+		// two-argument Invoke this file used to carry threw TargetParameterCountException inside
+		// the boot coroutine. Nothing caught it, so the coroutine died and the host was left in
+		// the worst state it has: process alive, HTTP listener answering, gameplay socket never
+		// bound, world never loaded, phase stuck on "Loading the world" forever. That is what the
+		// first ever paying customer got, because the host installs Steam latest and every proof
+		// this product had was taken on 1.0.4.
+		//
+		// A parameter we know is passed by NAME. A parameter we do not know takes its own default
+		// if it has one, and otherwise the zero value for its type - and is recorded, so a build
+		// that changes behaviour behind a new argument shows up as drift rather than as a mystery.
+		private static object[] BuildArguments(MethodInfo method, Dictionary<string, object> known)
+		{
+			ParameterInfo[] parameters = method.GetParameters();
+			if (parameters.Length == 0) return null;
+
+			object[] arguments = new object[parameters.Length];
+			for (int i = 0; i < parameters.Length; i++)
+			{
+				ParameterInfo parameter = parameters[i];
+				object value;
+				if (known.TryGetValue(parameter.Name, out value))
+				{
+					arguments[i] = value;
+					continue;
+				}
+				if (parameter.IsOptional && parameter.DefaultValue != DBNull.Value)
+				{
+					arguments[i] = parameter.DefaultValue;
+					continue;
+				}
+				arguments[i] = parameter.ParameterType.IsValueType
+					? Activator.CreateInstance(parameter.ParameterType)
+					: null;
+				string note = method.DeclaringType?.Name + "." + method.Name + "(" +
+					parameter.ParameterType.Name + " " + parameter.Name + ")";
+				if (!GameApiDrift.Contains(note)) GameApiDrift.Add(note);
+				Plugin.Log?.LogWarning("The game added a parameter this host does not know about: " + note +
+					". It is being passed its zero value. Check the game's release notes before trusting it.");
+			}
+			return arguments;
+		}
+
 		// Reproduces what the main menu does, in the order the menu does it.
+		//
+		// NOTHING HERE MAY THROW. This runs inside the boot coroutine; an escaping exception kills
+		// the coroutine and hangs the host instead of refusing it, which is strictly worse than
+		// any failure it could report. Every exit is a message the supervisor can act on.
 		internal static string LoadOrCreateWorld(string worldName)
+		{
+			try
+			{
+				return LoadOrCreateWorldCore(worldName);
+			}
+			catch (Exception exception)
+			{
+				Exception inner = exception is TargetInvocationException invocation && invocation.InnerException != null
+					? invocation.InnerException
+					: exception;
+				return "This server could not load or create the world \"" + worldName + "\" (" +
+					inner.GetType().Name + ": " + inner.Message + "). The game's save management has " +
+					"probably changed in a build this host has not been updated for.";
+			}
+		}
+
+		private static string LoadOrCreateWorldCore(string worldName)
 		{
 			Type saveManager = AccessTools.TypeByName("SaveManager");
 			if (saveManager == null) return "The game no longer contains SaveManager, so this server cannot load or create a world.";
@@ -90,19 +162,27 @@ namespace DriftwoodHost
 				return "The game's save-management methods have moved, so this server cannot load or create a world.";
 			}
 
-			loadAll.Invoke(null, null);
-			select.Invoke(null, new object[] { worldName });
+			loadAll.Invoke(null, BuildArguments(loadAll, new Dictionary<string, object>()));
+			select.Invoke(null, BuildArguments(select, new Dictionary<string, object> { { "name", worldName } }));
 
 			if (current.GetValue(null, null) == null)
 			{
 				// useSteam: false. The saved flag decides which lobby the MENU would open; a
 				// Driftwood host always runs the direct-UDP path regardless, but writing the
 				// honest value keeps the save loadable in the retail client.
-				create.Invoke(null, new object[] { worldName, false });
+				//
+				// isPublic (added in 1.0.5) is only ever read as "UseSteam && IsPublic", so with
+				// useSteam false it is inert either way; false is the honest value.
+				create.Invoke(null, BuildArguments(create, new Dictionary<string, object>
+				{
+					{ "serverName", worldName },
+					{ "useSteam", false },
+					{ "isPublic", false }
+				}));
 				CreatedNewWorld = true;
 			}
 
-			onLoaded.Invoke(null, null);
+			onLoaded.Invoke(null, BuildArguments(onLoaded, new Dictionary<string, object>()));
 
 			if (current.GetValue(null, null) == null)
 			{

@@ -2,6 +2,25 @@
 
 All notable changes to DriftwoodServer are recorded here.
 
+## 0.1.1
+
+### Fixed
+
+- A world could not be created on retail build 1.0.5. The game added a third parameter to
+  `SaveManager.CreateServer` (`isPublic`), the host's hard-coded two-argument reflection call threw
+  `TargetParameterCountException` inside the boot coroutine, and nothing caught it: the process
+  stayed alive with its HTTP API answering while the gameplay socket was never bound and the world
+  never loaded. Every argument list is now built from the method the game actually shipped, so a
+  parameter added by a future build takes its own default instead of breaking the boot.
+- World load can no longer hang the host. Anything thrown while loading or creating the world is
+  caught and reported as a refusal, because a host that refuses can be retried and a host that
+  hangs cannot.
+
+### Added
+
+- `gameApiDrift` in the readiness document: the parameters the game has grown on methods this host
+  calls by reflection. Empty is the normal state.
+
 ## 0.1.0
 
 ### Added

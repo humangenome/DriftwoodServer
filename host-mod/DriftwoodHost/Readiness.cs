@@ -162,6 +162,10 @@ namespace DriftwoodHost
 					.Add("bootAssertionsPassed", BootAssertionsPassed)
 					.AddStrings("roster", _roster)
 					.AddStrings("unrecognisedConfigKeys", UnrecognisedConfigKeys)
+					// Parameters the game grew on methods this host calls by reflection. Empty is
+					// the normal state; a non-empty list means the game moved under us and something
+					// is being passed a value nobody chose.
+					.AddStrings("gameApiDrift", WorldLifecycle.GameApiDrift)
 					.Add("displayNamesResolved", DisplayNamesResolved)
 					.Add("effectiveBindAddress", EffectiveBindAddress)
 					.Add("effectiveTargetFrameRate", EffectiveTargetFrameRate)
