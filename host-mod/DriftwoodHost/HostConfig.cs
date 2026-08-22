@@ -184,6 +184,21 @@ namespace DriftwoodHost
 			return fallback;
 		}
 
+		// Path.IsPathRooted answers for the RUNNING OS, so a Windows path reads as relative when the
+		// same code is exercised on Linux (CI, unit tests). This host only ever runs on Windows, so
+		// the check has to be about the path, not about the machine reading it.
+		internal static bool IsAbsolutePath(string value)
+		{
+			if (string.IsNullOrWhiteSpace(value)) return false;
+			// C:\... or C:/...
+			if (value.Length >= 3 && char.IsLetter(value[0]) && value[1] == ':' &&
+				(value[2] == '\\' || value[2] == '/')) return true;
+			// \\server\share
+			if (value.StartsWith("\\\\", StringComparison.Ordinal)) return true;
+			// POSIX, for development on a non-Windows machine.
+			return value[0] == '/';
+		}
+
 		public int EffectiveHttpPort => HttpPort > 0 ? HttpPort : Port + 1;
 
 		public string ResolveStateDirectory(string fallback) =>
@@ -222,7 +237,7 @@ namespace DriftwoodHost
 			// world. There is no safe default, so there is no default.
 			if (string.IsNullOrWhiteSpace(SaveRoot))
 				return "SaveRoot is not set. Without it this server would save into a folder shared with every other server on this machine, and they would overwrite each other's worlds.";
-			if (!Path.IsPathRooted(SaveRoot.Trim()))
+			if (!IsAbsolutePath(SaveRoot.Trim()))
 				return "SaveRoot must be an absolute path.";
 			if (StartDelaySeconds < 0f || StartDelaySeconds > 300f)
 				return "StartDelaySeconds is outside the supported range of 0 to 300.";

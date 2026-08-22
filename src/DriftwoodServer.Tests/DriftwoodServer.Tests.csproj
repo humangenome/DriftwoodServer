@@ -11,4 +11,13 @@
   <ItemGroup>
     <ProjectReference Include="../DriftwoodServer/DriftwoodServer.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The host mod's config reader has no Unity or BepInEx dependency, on purpose: it is the one
+         file where a cross-lane key-name disagreement turns into a server running on defaults, so
+         it is worth testing on its own. Linked rather than duplicated. -->
+    <Compile Include="../../host-mod/DriftwoodHost/HostConfig.cs" Link="Linked/HostConfig.cs" />
+  </ItemGroup>
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);CS8618;CS8600;CS8601;CS8602;CS8603;CS8604;CS8625</NoWarn>
+  </PropertyGroup>
 </Project>
