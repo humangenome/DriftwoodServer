@@ -52,8 +52,10 @@ OneShotKills = false
 StateDirectory = $state
 InstanceRoot = $dst
 "@
-# The plugin id IS the config filename. Remove the pre-rename name so a stale file cannot be
-# mistaken for the live one.
-Remove-Item "$dst\BepInEx\config\com.humangenome.driftwood.host.cfg" -Force -EA SilentlyContinue
+# The plugin id IS the config filename, so a rename leaves an orphan behind. Remove ANY Driftwood
+# host config that is not the current one, so a stale file can never be mistaken for the live one.
+Get-ChildItem "$dst\BepInEx\config" -Filter '*.driftwood.host.cfg' -EA SilentlyContinue |
+  Where-Object { $_.Name -ne 'com.humangenome.driftwood.host.cfg' } |
+  ForEach-Object { Remove-Item $_.FullName -Force -EA SilentlyContinue }
 Set-Content -Path "$dst\BepInEx\config\com.humangenome.driftwood.host.cfg" -Value $cfg -Encoding UTF8
 Write-Output "deployed i$Instance port=$Port http=$($Port+1) slots=$Slots fps=$Fps physics=$PhysicsStep tick=$TickRate pauseEmpty=$PauseEmpty suppress=$Suppress world=$World"
