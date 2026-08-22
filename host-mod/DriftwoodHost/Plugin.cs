@@ -190,6 +190,19 @@ namespace DriftwoodHost
 			QualitySettings.vSyncCount = 0;
 			Application.targetFrameRate = wanted <= 0 ? -1 : wanted;
 			_readiness.EffectiveTargetFrameRate = Application.targetFrameRate;
+
+			// The physics step is wall-clock driven, so no frame cap touches it. Only change it on
+			// a deliberate decision - it is simulation fidelity, not overhead.
+			if (_config.PhysicsStepSeconds > 0f)
+			{
+				Time.fixedDeltaTime = _config.PhysicsStepSeconds;
+				if (!Mathf.Approximately(Time.fixedDeltaTime, _config.PhysicsStepSeconds))
+				{
+					Logger.LogWarning("Physics step did not take: asked for " + _config.PhysicsStepSeconds +
+						"s, the engine reports " + Time.fixedDeltaTime + "s.");
+				}
+			}
+			_readiness.EffectivePhysicsStepSeconds = Time.fixedDeltaTime;
 			if (wanted > 0 && Application.targetFrameRate != wanted)
 			{
 				Logger.LogWarning("Frame cap did not take: asked for " + wanted +
@@ -315,6 +328,7 @@ namespace DriftwoodHost
 		private void ApplyWorldSettings()
 		{
 			_settingsApplied = true;
+			ApplyNetworkTickRate();
 			if (!WorldLifecycle.SetAutoSaveInterval(_config.AutoSaveMinutes))
 			{
 				Logger.LogWarning("Could not set the auto-save interval; the game's own default stays in force.");
@@ -328,6 +342,33 @@ namespace DriftwoodHost
 		private void Update()
 		{
 			_frames.Sample(Time.unscaledDeltaTime);
+		}
+
+		// The netcode tick is also wall-clock driven and also invisible to a frame cap. It can only
+		// be set once the NetworkManager exists, which is why it happens here rather than at boot.
+		private void ApplyNetworkTickRate()
+		{
+			try
+			{
+				object timeManager = InstanceFinder.TimeManager;
+				if (timeManager == null) return;
+				if (_config.NetworkTickRate > 0)
+				{
+					AccessTools.Method(timeManager.GetType(), "SetTickRate")
+						?.Invoke(timeManager, new object[] { (ushort)_config.NetworkTickRate });
+				}
+				object current = AccessTools.Property(timeManager.GetType(), "TickRate")?.GetValue(timeManager, null);
+				if (current != null) _readiness.EffectiveNetworkTickRate = Convert.ToInt32(current);
+				if (_config.NetworkTickRate > 0 && _readiness.EffectiveNetworkTickRate != _config.NetworkTickRate)
+				{
+					Logger.LogWarning("Network tick rate did not take: asked for " + _config.NetworkTickRate +
+						", the game reports " + _readiness.EffectiveNetworkTickRate + ".");
+				}
+			}
+			catch (Exception exception)
+			{
+				Logger.LogWarning("Could not read or set the network tick rate: " + exception.Message);
+			}
 		}
 
 		private void Sample()

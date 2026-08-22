@@ -54,6 +54,16 @@ namespace DriftwoodHost
 		public bool CountHostPlayer;
 		public bool SuppressGhostHost = true;
 		public int TargetFrameRate;
+		// The two levers a frame cap CANNOT reach. Decompiled, the game runs 31 FixedUpdate methods
+		// and 22 FishNet tick subscriptions alongside its 60 Update / 29 LateUpdate methods, and
+		// physics and netcode are driven by wall-clock steps rather than by frames. So a frame cap
+		// only touches part of the cost and leaves a floor underneath it.
+		//
+		// Both default to 0 = LEAVE THE GAME'S OWN VALUE ALONE. Neither is a free win: the physics
+		// step is simulation fidelity and the tick rate is how often the world is replicated. They
+		// exist so the levers are measurable without a rebuild, not so they can be turned casually.
+		public float PhysicsStepSeconds;
+		public int NetworkTickRate;
 
 		// Fault injection, defaulted off. Playbook 1d requirement 2 ends with "test this by breaking
 		// it on purpose - a gate you have never seen fail is not a gate", and the gate in question
@@ -97,6 +107,8 @@ namespace DriftwoodHost
 			config.CountHostPlayer = config.Bool(config.CountHostPlayer, "CountHostPlayer");
 			config.SuppressGhostHost = config.Bool(config.SuppressGhostHost, "SuppressGhostHost", "HideHostPlayer");
 			config.TargetFrameRate = config.Int(config.TargetFrameRate, "TargetFrameRate", "FrameRate", "Fps");
+			config.PhysicsStepSeconds = config.Float(config.PhysicsStepSeconds, "PhysicsStepSeconds", "FixedDeltaTime");
+			config.NetworkTickRate = config.Int(config.NetworkTickRate, "NetworkTickRate", "TickRate");
 
 			config.SimulateMissingPatch = config.String(config.SimulateMissingPatch, "SimulateMissingPatch");
 			config.StateDirectory = config.String(config.StateDirectory, "StateDirectory", "StateRoot");
@@ -212,6 +224,10 @@ namespace DriftwoodHost
 				return "WorldReadyTimeoutSeconds is outside the supported range of 30 to 1800.";
 			if (TargetFrameRate < 0 || TargetFrameRate > 1000)
 				return "TargetFrameRate is outside the supported range of 0 to 1000.";
+			if (PhysicsStepSeconds != 0f && (PhysicsStepSeconds < 0.01f || PhysicsStepSeconds > 0.1f))
+				return "PhysicsStepSeconds is outside the safe range of 0.01 to 0.1 seconds; anything coarser makes fast-moving objects tunnel through the world.";
+			if (NetworkTickRate != 0 && (NetworkTickRate < 10 || NetworkTickRate > 128))
+				return "NetworkTickRate is outside the supported range of 10 to 128 ticks per second.";
 			if (AutoSaveMinutes < 1f || AutoSaveMinutes > 60f)
 				return "AutoSaveMinutes is outside the range the game accepts, which is 1 to 60.";
 			return null;
