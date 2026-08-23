@@ -16,6 +16,13 @@ placeholder player, and refuses to host rather than hosting nothing.
 | `src/DriftwoodServer` | The .NET 8 supervisor. Verifies the pinned game build before anything starts, owns the game process and its logs, consumes the readiness signal, and serves a health endpoint. |
 | `bench/` | Measurement rigs. Never shipped — see `bench/NOT-SHIPPED.md`. |
 
+## Run your own server
+
+[docs/self-hosting.md](docs/self-hosting.md) walks the whole thing end to end on a Windows machine
+you control: copy your own game files, install the release overlay, build the supervisor, pin the
+build, open two ports, start. How to Fish ships no dedicated server, so this repo is the only way
+to run one — hosted by us or by you.
+
 ## Design rules this codebase is built around
 
 **A server that cannot host must not present a port.** Every patch target is resolved before any
