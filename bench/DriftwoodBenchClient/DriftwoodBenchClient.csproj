@@ -5,7 +5,12 @@
     <AssemblyName>DriftwoodBenchClient</AssemblyName>
     <RootNamespace>DriftwoodBenchClient</RootNamespace>
     <DebugType>none</DebugType>
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <!-- MUST stay true, like DriftwoodHost.csproj and DriftwoodConnect.csproj. With it off
+         the compiler emits no AssemblyFileVersion attribute, so any -p:FileVersion a build
+         passes is discarded in silence and the DLL stamps 0.0.0.0. This bench rig never
+         ships, but a bare false here is exactly the line that gets copy-pasted into a
+         csproj that does - that is how the host mod originally shipped 0.0.0.0. -->
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <NoWarn>$(NoWarn);MSB3277;CS0436</NoWarn>
     <AssemblySearchPaths>$(AssemblySearchPaths);$(ManagedDir)</AssemblySearchPaths>
     <HostModDir>$(MSBuildThisFileDirectory)../../host-mod/DriftwoodHost/</HostModDir>
