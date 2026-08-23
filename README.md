@@ -62,6 +62,13 @@ Only `Assembly-CSharp.dll` identifies a build — the Unity launcher stub does n
 versions — so the pin is that assembly's hash, cross-checked against Steam's own install record
 for a queued, failed or half-applied update.
 
----
+## Official hosting
 
-Hosting: [SurvivalServers.com](https://www.survivalservers.com/) runs Driftwood for you.
+DriftwoodServer is officially supported by
+[SurvivalServers.com](https://www.survivalservers.com/services/game_servers/how_to_fish/?utm_source=github&utm_medium=readme&utm_campaign=driftwoodserver),
+which runs How to Fish servers with Driftwood installed and kept on the latest pinned
+release.
+
+## License
+
+[MIT](LICENSE) © HumanGenome

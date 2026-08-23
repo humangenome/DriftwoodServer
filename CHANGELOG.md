@@ -2,7 +2,7 @@
 
 All notable changes to DriftwoodServer are recorded here.
 
-## 0.1.1
+## [0.1.1] - 2026-08-22
 
 ### Fixed
 
@@ -21,7 +21,7 @@ All notable changes to DriftwoodServer are recorded here.
 - `gameApiDrift` in the readiness document: the parameters the game has grown on methods this host
   calls by reflection. Empty is the normal state.
 
-## 0.1.0
+## [0.1.0] - 2026-08-22
 
 ### Added
 

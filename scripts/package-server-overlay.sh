@@ -16,21 +16,21 @@
 # Layout contract -- read this before changing a single path
 # ---------------------------------------------------------------------------
 # The zip is extracted whole into the shared per-tag cache on the host
-# (C:\Driftwood\_cache\<tag>\), and the host then
-# stages exactly ONE subtree out of it into the customer's game directory:
+# (for example C:\Driftwood\_cache\<tag>\), and the host then stages exactly ONE
+# subtree out of it into the game directory:
 #
 #   DriftwoodServer/bepinex/winhttp.dll                        -> <gamedir>\winhttp.dll
 #   DriftwoodServer/bepinex/doorstop_config.ini                -> <gamedir>\doorstop_config.ini
 #   DriftwoodServer/bepinex/BepInEx/core/**                    -> <gamedir>\BepInEx\core\**
 #   DriftwoodServer/bepinex/BepInEx/plugins/DriftwoodHost.dll  -> <gamedir>\BepInEx\plugins\...
 #
-# Those paths are read by name by the hosting endpoint, in its cache-staging
-# and per-instance install steps. A bundle that
-# builds and uploads but is missing one of them installs "successfully" and then
-# does nothing -- the game boots vanilla, binds LOOPBACK, and writes every
-# instance's world into one shared save directory. All of that is silent and all
-# of it looks healthy in the log, which is why every path below is asserted by
-# name rather than assumed from a build that exited 0.
+# Those paths are read by name by the hosting endpoint, in its cache-staging and
+# per-instance install steps. A bundle that builds and uploads but is missing one
+# of them installs "successfully" and then does nothing -- the game boots vanilla,
+# binds LOOPBACK, and writes every instance's world into one shared save
+# directory. All of that is silent and all of it looks healthy in the log, which
+# is why every path below is asserted by name rather than assumed from a build
+# that exited 0.
 #
 # The destination is the GAME DIRECTORY, which also holds the game itself and the
 # customer's saves, so the host never mirrors the root -- only BepInEx\ is
@@ -356,8 +356,8 @@ Built, not shipped.
   sha256   $SHA
 
 That sha256 is NOT the value to pin. Pin the hash measured by fetching the file
-back from the CDN edge -- the publish step prints it, and the two
-agreeing is the only proof the edge serves what was built.
+back from the CDN edge -- the publish step prints it, and the two agreeing is the
+only proof the edge serves what was built.
 
 Next:
   1. Publish:  upload the bundle to wherever your hosts download it from.

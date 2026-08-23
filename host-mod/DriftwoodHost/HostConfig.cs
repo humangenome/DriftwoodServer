@@ -125,7 +125,7 @@ namespace DriftwoodHost
 			// spelling on the writing side.
 			config.AuthToken = config.String(config.AuthToken,
 				"Http.Password", "Http.AuthToken", "Http.Token", "Server.AuthToken",
-				"AuthToken", "AdminToken", "PassRcon", "RconPassword");
+				"AuthToken", "AdminToken", "RconPassword");
 
 			config.WorldName = config.String(config.WorldName,
 				"World.Name", "World.WorldName", "Server.WorldName", "WorldName", "world_name", "SaveName");

@@ -117,7 +117,7 @@ namespace DriftwoodHost
 				case "stop":
 				case "shutdown":
 				case "restart":
-					output = "lifecycle is not on this console. Stop and restart from your SurvivalServers control panel, " +
+					output = "lifecycle is not on this console. Stop and restart from your hosting panel or supervisor, " +
 						"which flushes the world and takes a backup first - this console would skip both.";
 					return false;
 
@@ -154,7 +154,7 @@ namespace DriftwoodHost
 				"snapshot    save, then archive the world",
 				"snapshots   list the archives on this server",
 				"",
-				"Stop and restart live in your SurvivalServers control panel: they flush and back up first.",
+				"Stop and restart live in your hosting panel or supervisor: they flush and back up first.",
 				"How to Fish itself ships no admin, kick or ban system, so this console has none either."
 			});
 		}

@@ -34,8 +34,9 @@ X-Driftwood-Signature: hex(HMACSHA256(sha256(AuthToken), "METHOD\n<path>\n<ts>\n
 - `<path>` is the URL path only — no host, no query string.
 - Signatures older or newer than **300 seconds** are refused, and each signature is accepted **once**
   (replay guard). Without that, anyone who captured one `restore` request could roll a world back.
-- `AuthToken` is the server's `passrcon`, written by the panel into `[Server] AuthToken`. An empty
-  token makes every signed route refuse — fail-closed, and logged loudly at boot.
+- `AuthToken` is the server's API secret, written by the hosting endpoint into
+  `[Server] AuthToken`. An empty token makes every signed route refuse — fail-closed, and
+  logged loudly at boot.
 
 There used to be a second scheme here, a static token in `X-Driftwood-Auth`, while the launcher
 signed every request the way the rest of the family signs them. Two schemes on one API is how one of
