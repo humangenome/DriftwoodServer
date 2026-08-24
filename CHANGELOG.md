@@ -27,6 +27,29 @@ All notable changes to DriftwoodServer are recorded here.
   block, unblock and broadcast with a transport-derived actor, its target and whether it worked —
   so "the host kicked me for no reason", arriving days later, has an answer.
 
+### Fixed
+
+- The supervisor now writes `steam_appid.txt` into the game folder before every launch. Without
+  that file the game's Steam wrapper quits during boot - exit code 0, clean log - so a server
+  built by following `docs/self-hosting.md` failed on its very first start: the fleet's installer
+  writes the file, but a self-host install had nobody to do it. Found by executing the
+  self-hosting walkthrough end to end on a clean machine.
+- `appsettings.example.json` now ships `httpPort: 0`, which the self-hosting guide already
+  documented as the value to keep. The old example value of 22004 could never host: the
+  supervisor's own health endpoint claimed the port before the game loaded, and the host mod -
+  whose API takes game port + 1 on its own - then refused with "could not open its status port".
+- A stop requested through `host-state\stop.requested` is now reported as the clean stop it is.
+  The host mod consumes the stop file (save, final readiness, delete, quit), so by the time the
+  supervisor saw the exit the file was gone and every clean stop was announced as "stopped
+  unexpectedly" - which reads like a crash to exactly the operator who just followed the manual.
+  The supervisor now also accepts the mod's final "Stopped" readiness as proof of a requested
+  stop.
+- `global.json` no longer rejects current .NET 8 SDKs. It pinned 8.0.100 with
+  `rollForward: latestPatch`, which only matches the 8.0.1xx feature band - so on the 8.0.4xx
+  SDK that dotnet.microsoft.com actually ships today, every `dotnet` command run from inside the
+  repo failed with "A compatible .NET SDK was not found" (the README build commands among them).
+  `latestFeature` accepts any .NET 8 SDK and still refuses 9.x.
+
 ## [0.1.1] - 2026-08-22
 
 ### Fixed
