@@ -130,15 +130,41 @@ A refused or unknown command answers **200 with `ok: false`** and an output line
 console prints a reason instead of an HTTP status.
 
 **This is a HOST console, not a game console.** The shipped How to Fish build has no admin concept,
-no ban list and no server console — its cheat commands are local and client-side. So the command set
-is what the host process genuinely knows or can genuinely do:
+no ban list and no server console — its cheat commands are local and client-side. The read-side
+commands are what the host process genuinely knows; the owner actions are built by the host from
+the two primitives the game genuinely has (FishNet's server-side connection kick, and the game's
+own chat RPC invoked from the server, which every vanilla client renders as a `[Server]` line):
 
 ```
 help  status  players  version  world  save  snapshot  snapshots
+kick  block  unblock  blocked  say  audit
 ```
 
-`stop`, `restart`, `kick`, `ban`, `say` and friends are **named refusals**: they answer with where
-that thing actually lives rather than with "unknown command", which would read as a typo. Lifecycle
+- `players` on this console carries the **SteamID64** beside each name — the caller authenticated,
+  and the id is the only honest key for `kick` and `block`. The public `/players` route still
+  never carries an id.
+- `kick <SteamID64 or name>` removes a connected player (they can reconnect). A name must be
+  unambiguous among connected players; two players can wear the same name, so ties refuse and
+  point at the id.
+- `block <SteamID64 or name>` adds them to the server's block list, removes them if connected, and
+  keeps them out (a sweep on the roster sampler removes a blocked player within ~2 seconds of
+  connecting — the game offers no earlier hook that already knows the SteamID). `unblock <id>`
+  reverses it; `blocked` lists entries. **Blocks key on the SteamID64, never the name.** The list
+  lives under the instance root (`Driftwood\blocklist.txt`), outside the game tree and outside
+  `Saves\`, so a validate cannot clear a ban and a world restore cannot roll one back. `ban` /
+  `unban` / `banlist` are accepted aliases.
+- `say <text>` broadcasts a `[Server]` chat line to every connected player, through the game's own
+  `OnlineChatManager` RPC with a from-id of 0 — which vanilla clients render as the server because
+  a launcher-joined client's lobby id is nil. No client mod involved.
+- `audit [n]` shows the last n owner actions (default 20). Every kick, block, unblock and
+  broadcast is recorded to `Logs\owner-actions.log` — timestamp, actor, verb, target, ok/refused,
+  detail — with the actor **transport-derived, never claimed**: `panel` for a loopback caller,
+  `console` for a remote caller that proved itself with the signed API secret, `server` for the
+  block-list sweep itself. "Your host kicked me for no reason" arrives in a support ticket days
+  later, and this line is the difference between an answer and a shrug.
+
+`stop`, `restart`, `op` and friends are **named refusals**: they answer with where that thing
+actually lives rather than with "unknown command", which would read as a typo. Lifecycle
 is deliberately absent — the panel's stop and restart flush the world and take a backup first, and a
 console shortcut past that ordering would be a data-safety regression dressed as a convenience.
 

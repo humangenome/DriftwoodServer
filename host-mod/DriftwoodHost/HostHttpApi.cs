@@ -540,7 +540,13 @@ namespace DriftwoodHost
 				{
 					string command = JsonRead.String(request.Body, "command");
 					string output;
-					bool ok = ConsoleCommands.Execute(command, _readiness, _config, out output);
+					// The actor is TRANSPORT-DERIVED, never claimed: "panel" is a loopback
+					// caller (the hosting panel or the supervisor on this box), "console" is a
+					// remote caller that proved itself with this server's signed API secret.
+					// It exists for the owner-action audit trail and is not a permission level -
+					// the route's auth tier already decided who may be here.
+					bool ok = ConsoleCommands.Execute(command,
+						request.IsLoopback ? "panel" : "console", _readiness, _config, out output);
 					// 200 with ok=false on a refused or unknown command, by contract with the
 					// launcher: it prints the reason instead of an HTTP status, and a status code
 					// is not a sentence anybody can act on.

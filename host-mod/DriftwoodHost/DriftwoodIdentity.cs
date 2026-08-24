@@ -40,6 +40,20 @@ namespace DriftwoodHost
 			lock (Sync) Names.Remove(steamId);
 		}
 
+		// True when a REAL name is held for this id - one a client supplied or the Steam Web
+		// API resolved - as opposed to the synthetic placeholder ResolveName falls back to.
+		public static bool HasKnownName(ulong steamId)
+		{
+			lock (Sync) return Names.ContainsKey(steamId);
+		}
+
+		// The known name or null, never a placeholder. The name cache writer uses this so a
+		// placeholder can never be persisted and later served as though it were real.
+		public static string KnownNameOrNull(ulong steamId)
+		{
+			lock (Sync) return Names.TryGetValue(steamId, out string known) ? known : null;
+		}
+
 		public static string HostDisplayName = "Server";
 
 		public static string ResolveName(CSteamID id)

@@ -10,7 +10,11 @@ appsettings.local.json
 *.zip
 
 # Game binaries. These are Dazed Games' property and are never committed.
+# Both forms: refs/ matches a real directory, the bare name matches the symlink
+# a dev box points at its own game install - a symlink slips past the slash form
+# and would commit a local machine path as the link target.
 host-mod/DriftwoodHost/refs/
+host-mod/DriftwoodHost/refs
 host-mod/DriftwoodHost/BepInEx.dll
 host-mod/DriftwoodHost/0Harmony.dll
 

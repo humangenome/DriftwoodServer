@@ -75,6 +75,12 @@ namespace DriftwoodHost
 		public int EffectiveNetworkTickRate;
 		public bool WorldPaused;
 		public bool FrameLimiterActive;
+		// One plain sentence from the Steam name resolver, so "why are the names placeholders"
+		// is answerable from the panel instead of from a log dive. "off (...)" / "ok (...)" /
+		// "failing (...)".
+		public string SteamNameResolution = string.Empty;
+		// How many SteamIDs the owner's block list currently holds. Zero is the normal state.
+		public int BlockedPlayers;
 		public bool LoopIdling;
 		public int IdleTransitions;
 		public int WorldResumeCount;
@@ -167,6 +173,8 @@ namespace DriftwoodHost
 					// is being passed a value nobody chose.
 					.AddStrings("gameApiDrift", WorldLifecycle.GameApiDrift)
 					.Add("displayNamesResolved", DisplayNamesResolved)
+					.Add("steamNameResolution", SteamNameResolution)
+					.Add("blockedPlayers", BlockedPlayers)
 					.Add("effectiveBindAddress", EffectiveBindAddress)
 					.Add("effectiveTargetFrameRate", EffectiveTargetFrameRate)
 					.Add("actualFrameRate", ActualFrameRate)

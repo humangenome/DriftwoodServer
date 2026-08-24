@@ -175,6 +175,23 @@ namespace DriftwoodHost
 			// straight back over the restored files and the restore was silently a no-op.
 			SnapshotStore.ApplyPending();
 
+			// The owner layer, in dependency order: the audit record first (so even an
+			// enforcement that fires during boot can be recorded), then the block list it
+			// enforces, then the name resolver that labels its entries. Each is fail-soft by
+			// contract - a missing key or an unreadable file degrades to placeholders or an
+			// empty list, loudly, and never stops the boot.
+			OwnerAudit.Initialise(BootMarkers.LogsDirectory);
+			string blocklistProblem = Blocklist.Initialise(instanceRoot, stateDirectory);
+			if (blocklistProblem != null)
+			{
+				Logger.LogWarning("Blocklist: " + blocklistProblem + ".");
+			}
+			else if (Blocklist.Count > 0)
+			{
+				Logger.LogInfo("Blocklist loaded: " + Blocklist.Count + " blocked player(s) will be kept out.");
+			}
+			SteamNameResolver.Initialise(_config, stateDirectory);
+
 			GhostHost.Suppress = _config.SuppressGhostHost;
 			EmptyWorldPause.Enabled = _config.PauseWorldWhenEmpty;
 			if (EmptyWorldPause.Enabled)
@@ -537,11 +554,27 @@ namespace DriftwoodHost
 						ulong steamId = player.SteamID;
 						if (steamId == DriftwoodIdentity.HostSteamId) continue;
 						rosterIds.Add(steamId);
-						rosterNames.Add(player.SteamName ?? DriftwoodIdentity.Placeholder(steamId));
+						// Identity map FIRST, the game's cached copy second. The game resolves
+						// SteamName exactly once, at join, through our patched
+						// GetFriendPersonaName - which answers with a placeholder until the
+						// Steam Web API lookup lands seconds later. Reading the map on every
+						// sample is what lets a name arrive AFTER the join and still reach the
+						// roster; the game's copy alone would hold the placeholder forever.
+						rosterNames.Add(DriftwoodIdentity.KnownNameOrNull(steamId)
+							?? player.SteamName
+							?? DriftwoodIdentity.Placeholder(steamId));
 						rosterConnections.Add(null);
 					}
 				}
 				PlayerDirectory.Observe(rosterIds, rosterNames, rosterConnections);
+				// Hand the connected ids to the name resolver (a set-add under a lock, nothing
+				// slower - the actual HTTP happens on its own thread), and sweep the block list.
+				// Both live in the sampler because it is the one recurring main-thread walk that
+				// already knows who is connected.
+				SteamNameResolver.Request(rosterIds);
+				OwnerActions.EnforceBlocklist();
+				_readiness.SteamNameResolution = SteamNameResolver.State;
+				_readiness.BlockedPlayers = Blocklist.Count;
 				List<string> roster = PlayerDirectory.IdentifiedRoster();
 				_readiness.SetRoster(roster);
 				_readiness.ServerStarted = InstanceFinder.NetworkManager?.IsServerStarted ?? false;

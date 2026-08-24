@@ -23,6 +23,13 @@
          or BepInEx dependency either, so it can be pinned here to a golden vector whose other
          half lives in the hosting endpoint's own test. -->
     <Compile Include="../../host-mod/DriftwoodHost/ApiSignature.cs" Link="Linked/ApiSignature.cs" />
+    <!-- The owner layer's dependency-free pieces, linked for the same reason. The parser eats
+         attacker-controlled persona names, the block list is the store a ban's survival depends
+         on, and the audit log is the record support answers from - each is provable without a
+         running game, so it is proven here. -->
+    <Compile Include="../../host-mod/DriftwoodHost/SteamProfileParser.cs" Link="Linked/SteamProfileParser.cs" />
+    <Compile Include="../../host-mod/DriftwoodHost/Blocklist.cs" Link="Linked/Blocklist.cs" />
+    <Compile Include="../../host-mod/DriftwoodHost/OwnerAudit.cs" Link="Linked/OwnerAudit.cs" />
   </ItemGroup>
   <PropertyGroup>
     <NoWarn>$(NoWarn);CS8618;CS8600;CS8601;CS8602;CS8603;CS8604;CS8625</NoWarn>

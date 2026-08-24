@@ -47,6 +47,18 @@ TargetFrameRate = 0            ; 0 = uncapped. Worth nothing on this game (see t
 Port = 22004                   ; gameplay port + 1
 Password = <token>             ; the API token for every mutating route. NOT the join password.
 
+[Identity]
+SteamWebApiKeyFile = <path>    ; OPTIONAL. A file holding a Steam Web API key (32 hex chars).
+                               ; With it the host resolves player SteamIDs to real persona names
+                               ; over ISteamUser/GetPlayerSummaries - a headless box has no Steam
+                               ; client, and the game never puts names on the wire. Without it
+                               ; the roster shows stable synthetic placeholders and everything
+                               ; else works. A hosting provider points this at a machine-level
+                               ; secrets file OUTSIDE the customer's FTP jail; the key must never
+                               ; sit in a customer-readable tree.
+SteamWebApiKey = <key>         ; OPTIONAL, inline form of the same - a self-hoster's convenience
+                               ; (their box, their config file). The file form wins when both set.
+
 [World]
 Name = Driftwood               ; a FILENAME: the save is <SaveRoot>\<Name>.txt. Never "local".
 AutoSaveMinutes = 5            ; the game clamps 1-60

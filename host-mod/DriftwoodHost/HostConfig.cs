@@ -44,6 +44,18 @@ namespace DriftwoodHost
 		public string JoinPassword = string.Empty;
 		public string AuthToken = string.Empty;
 
+		// Steam Web API key for resolving player SteamIDs to real persona names, because a
+		// headless host has no Steam client to ask. BOTH OPTIONAL - with neither set the roster
+		// keeps its synthetic placeholders and everything else works.
+		//
+		// The FILE form is the fleet's: the config carries only a path, and the key itself
+		// lives outside the customer's FTP jail (the panel points this at the machine-level
+		// secrets store). The INLINE form exists for a self-hoster whose config file is their
+		// own; on a rented server an inline key in the customer-readable config would hand a
+		// shared secret to every customer, which is why the panel never writes it.
+		public string SteamWebApiKeyFile = string.Empty;
+		public string SteamWebApiKey = string.Empty;
+
 		public string WorldName = "Driftwood";
 		public string SaveRoot = string.Empty;
 		public float AutoSaveMinutes = 5f;
@@ -126,6 +138,11 @@ namespace DriftwoodHost
 			config.AuthToken = config.String(config.AuthToken,
 				"Http.Password", "Http.AuthToken", "Http.Token", "Server.AuthToken",
 				"AuthToken", "AdminToken", "RconPassword");
+
+			config.SteamWebApiKeyFile = config.String(config.SteamWebApiKeyFile,
+				"Identity.SteamWebApiKeyFile", "Http.SteamWebApiKeyFile", "SteamWebApiKeyFile");
+			config.SteamWebApiKey = config.String(config.SteamWebApiKey,
+				"Identity.SteamWebApiKey", "Http.SteamWebApiKey", "SteamWebApiKey");
 
 			config.WorldName = config.String(config.WorldName,
 				"World.Name", "World.WorldName", "Server.WorldName", "WorldName", "world_name", "SaveName");

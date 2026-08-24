@@ -2,6 +2,31 @@
 
 All notable changes to DriftwoodServer are recorded here.
 
+## [Unreleased]
+
+### Added
+
+- Real player names on the roster. The game never transmits a name — each client resolves the
+  replicated SteamID64 through its own Steam client, which a headless host does not have — so the
+  roster showed stable synthetic placeholders. With a Steam Web API key configured
+  (`[Identity] SteamWebApiKeyFile`, or `SteamWebApiKey` inline for self-hosters) the host now
+  resolves ids to persona names over `ISteamUser/GetPlayerSummaries`: batched, cached across
+  restarts, and strictly off the hot path — no page render, join or frame ever waits on the
+  lookup, and any API failure just keeps the placeholder. Names stay display-only; every
+  per-player decision keys on the SteamID64. `steamNameResolution` in the readiness document says
+  in one sentence why names are or are not resolving.
+- Owner actions on the console, built from the two primitives the shipped game actually has
+  (the game itself ships no admin concept, no kick, no ban and no server-to-player chat):
+  `kick` (FishNet's server-side connection kick), `block` / `unblock` / `blocked` (a persistent
+  block list keyed on SteamID64 — never on a name — enforced within ~2 s of a blocked player
+  connecting, stored under the instance root so neither a validate nor a world restore can touch
+  it), and `say` (a `[Server]` chat line through the game's own chat RPC, rendered by every
+  vanilla client). `players` on the authenticated console now shows each player's SteamID64; the
+  public `/players` route still never carries an id.
+- An owner-action audit log (`Logs\owner-actions.log`, `audit [n]` on the console): every kick,
+  block, unblock and broadcast with a transport-derived actor, its target and whether it worked —
+  so "the host kicked me for no reason", arriving days later, has an answer.
+
 ## [0.1.1] - 2026-08-22
 
 ### Fixed
