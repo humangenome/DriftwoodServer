@@ -33,7 +33,8 @@ namespace DriftwoodHost
 		internal static readonly string[] Names =
 		{
 			"help", "status", "players", "version", "world", "save", "snapshot", "snapshots",
-			"kick", "block", "unblock", "blocked", "say", "audit"
+			"kick", "block", "unblock", "blocked", "say", "audit",
+			"money", "island", "spawn", "killboss"
 		};
 
 		// How long a command may wait for the main thread. Generous against a busy frame, small
@@ -149,6 +150,22 @@ namespace DriftwoodHost
 				case "audit":
 					output = AuditTail(args);
 					return true;
+
+				// The gameplay commands, built on the game's own host-gated dev suite - see
+				// OwnerGameplay for why the managers are invoked directly rather than through
+				// DazedCommands (which reaches for a local player and a camera this host does
+				// not have).
+				case "money":
+					return Money(actor, args, out output);
+
+				case "island":
+					return Island(actor, args, out output);
+
+				case "spawn":
+					return Spawn(actor, args, out output);
+
+				case "killboss":
+					return KillBoss(actor, out output);
 
 				// Named refusals. Each is a thing a player reasonably expects a server console
 				// to do, and each answers with where that thing actually is rather than with
@@ -359,6 +376,179 @@ namespace DriftwoodHost
 			return Finish(failure == null, auditProblem, ref output);
 		}
 
+		// ------------------------------------------------------------------
+		// Gameplay commands. Reads (money alone, island alone) are not audited, matching
+		// `players` and `blocked`; every mutation is.
+		// ------------------------------------------------------------------
+
+		private static bool Money(string actor, string args, out string output)
+		{
+			string verb = args;
+			string amountText = string.Empty;
+			int space = args.IndexOf(' ');
+			if (space > 0)
+			{
+				verb = args.Substring(0, space);
+				amountText = args.Substring(space + 1).Trim();
+			}
+			verb = verb.ToLowerInvariant();
+
+			if (verb.Length == 0)
+			{
+				int balance = 0;
+				string readFailure = null, runFailure;
+				bool ran = MainThread.Run(() => { readFailure = OwnerGameplay.MoneyBalance(out balance); },
+					ActionTimeoutMs, out runFailure);
+				if (!ran) readFailure = readFailure ?? runFailure;
+				output = readFailure != null
+					? "the wallet could not be read: " + readFailure
+					: "The crew's shared wallet holds " + balance.ToString("N0", CultureInfo.InvariantCulture) + ".";
+				return readFailure == null;
+			}
+
+			bool add = verb == "add" || verb == "give";
+			bool remove = verb == "remove" || verb == "take";
+			int amount;
+			if ((!add && !remove) ||
+				!int.TryParse(amountText, NumberStyles.None, CultureInfo.InvariantCulture, out amount))
+			{
+				output = "usage: money  |  money add <amount>  |  money remove <amount>. The wallet is shared by the whole crew.";
+				return false;
+			}
+
+			string failure = null;
+			int newBalance = 0;
+			string mutateRunFailure;
+			bool mutated = MainThread.Run(() => { failure = OwnerGameplay.MoneyChange(amount, add, out newBalance); },
+				ActionTimeoutMs, out mutateRunFailure);
+			if (!mutated) failure = failure ?? mutateRunFailure;
+
+			string detail = (add ? "add " : "remove ") + amount.ToString(CultureInfo.InvariantCulture);
+			string auditProblem = OwnerAudit.Record(actor, "money", detail, failure == null,
+				failure ?? ("wallet now " + newBalance.ToString(CultureInfo.InvariantCulture)));
+			output = failure != null
+				? "the wallet was not changed: " + failure
+				: (add ? "Added " : "Removed ") + amount.ToString("N0", CultureInfo.InvariantCulture) +
+					(add ? " to" : " from") + " the crew's shared wallet - it now holds " +
+					newBalance.ToString("N0", CultureInfo.InvariantCulture) + ".";
+			return Finish(failure == null, auditProblem, ref output);
+		}
+
+		private static bool Island(string actor, string args, out string output)
+		{
+			string verb = args;
+			string numberText = string.Empty;
+			int space = args.IndexOf(' ');
+			if (space > 0)
+			{
+				verb = args.Substring(0, space);
+				numberText = args.Substring(space + 1).Trim();
+			}
+			verb = verb.ToLowerInvariant();
+
+			if (verb.Length == 0)
+			{
+				string sentence = string.Empty;
+				string readFailure = null, runFailure;
+				bool ran = MainThread.Run(() => { readFailure = OwnerGameplay.IslandStatus(out sentence); },
+					ActionTimeoutMs, out runFailure);
+				if (!ran) readFailure = readFailure ?? runFailure;
+				output = readFailure != null ? "the island state could not be read: " + readFailure : sentence;
+				return readFailure == null;
+			}
+
+			string failure = null;
+			string done = null;
+			string target = verb;
+			string mutateRunFailure;
+			bool ran2;
+			switch (verb)
+			{
+				case "next":
+				case "prev":
+				case "previous":
+				{
+					bool backwards = verb != "next";
+					int landedOn = 0;
+					ran2 = MainThread.Run(() => { failure = OwnerGameplay.IslandStep(backwards, out landedOn); },
+						ActionTimeoutMs, out mutateRunFailure);
+					if (!ran2) failure = failure ?? mutateRunFailure;
+					if (failure == null)
+						done = "The whole crew is being moved to island " + landedOn +
+							" - everyone teleports to its spawn together.";
+					break;
+				}
+				case "set":
+				{
+					int wanted;
+					if (!int.TryParse(numberText, NumberStyles.None, CultureInfo.InvariantCulture, out wanted))
+					{
+						output = "usage: island set <number>. `island` alone shows where the crew is.";
+						return false;
+					}
+					target = "set " + wanted.ToString(CultureInfo.InvariantCulture);
+					bool unlocked = false;
+					ran2 = MainThread.Run(() => { failure = OwnerGameplay.IslandSet(wanted, out unlocked); },
+						ActionTimeoutMs, out mutateRunFailure);
+					if (!ran2) failure = failure ?? mutateRunFailure;
+					if (failure == null)
+						done = "The whole crew is being moved to island " + wanted + "." +
+							(unlocked ? " That island was still locked, so it has been unlocked for this world." : string.Empty);
+					break;
+				}
+				default:
+					output = "usage: island  |  island next  |  island prev  |  island set <number>.";
+					return false;
+			}
+
+			string auditProblem = OwnerAudit.Record(actor, "island", target, failure == null,
+				failure ?? "crew moved");
+			output = failure != null ? "the crew was not moved: " + failure : done;
+			return Finish(failure == null, auditProblem, ref output);
+		}
+
+		private static bool Spawn(string actor, string args, out string output)
+		{
+			if (args.Length == 0)
+			{
+				output = "usage: spawn <item name> - the in-game name, spaces optional. The item drops next to a connected player.";
+				return false;
+			}
+
+			string failure = null;
+			string spawnedName = string.Empty;
+			string nearName = string.Empty;
+			string runFailure;
+			bool ran = MainThread.Run(() => { failure = OwnerGameplay.SpawnItem(args, out spawnedName, out nearName); },
+				ActionTimeoutMs, out runFailure);
+			if (!ran) failure = failure ?? runFailure;
+
+			string auditProblem = OwnerAudit.Record(actor, "spawn",
+				SteamProfileParser.Sanitize(args, 100), failure == null,
+				failure ?? ("spawned " + spawnedName + " next to " + nearName));
+			output = failure != null
+				? "nothing was spawned: " + failure
+				: "Spawned " + spawnedName + " next to " + nearName + ".";
+			return Finish(failure == null, auditProblem, ref output);
+		}
+
+		private static bool KillBoss(string actor, out string output)
+		{
+			string failure = null;
+			string bossName = string.Empty;
+			string runFailure;
+			bool ran = MainThread.Run(() => { failure = OwnerGameplay.KillBoss(out bossName); },
+				ActionTimeoutMs, out runFailure);
+			if (!ran) failure = failure ?? runFailure;
+
+			string auditProblem = OwnerAudit.Record(actor, "killboss", bossName, failure == null,
+				failure ?? "boss killed");
+			output = failure != null
+				? "no boss was killed: " + failure
+				: bossName + " has been dealt a killing blow - the fight ends as a normal kill, trophy included.";
+			return Finish(failure == null, auditProblem, ref output);
+		}
+
 		private static string AuditTail(string args)
 		{
 			int count = 20;
@@ -414,6 +604,10 @@ namespace DriftwoodHost
 				"blocked     the block list, with ids",
 				"say <text>  send a [Server] line to every player's chat",
 				"audit [n]   the last n owner actions on this server (default 20)",
+				"money [add|remove <n>]  the crew's ONE shared wallet: show it, or change it",
+				"island [next|prev|set <n>]  where the crew is; move everyone together (islands are numbered from 1)",
+				"spawn <item>  drop one of the game's spawnable items next to a connected player",
+				"killboss    end the active boss fight as a kill (trophy and progression included)",
 				"",
 				"Blocks key on the SteamID64, never the name - names are display text anybody can change.",
 				"Stop and restart live in your hosting panel or supervisor: they flush and back up first."
@@ -434,6 +628,7 @@ namespace DriftwoodHost
 			builder.Append("game      ").Append(readiness.GameVersion.Length == 0 ? "unknown" : readiness.GameVersion).Append('\n');
 			builder.Append("blocked   ").Append(Blocklist.Count).Append(" player(s)\n");
 			builder.Append("names     ").Append(readiness.SteamNameResolution.Length == 0 ? "(not sampled yet)" : readiness.SteamNameResolution).Append('\n');
+			builder.Append("discord   ").Append(readiness.DiscordAlertsState.Length == 0 ? "(not sampled yet)" : readiness.DiscordAlertsState).Append('\n');
 			builder.Append("fps       ").Append(readiness.ActualFrameRate.ToString("0.#"))
 				.Append(readiness.FrameLimiterActive ? " (capped at " + readiness.EffectiveTargetFrameRate + ")" : " (uncapped)");
 			if (config != null && config.PauseWorldWhenEmpty && readiness.WorldPaused) builder.Append("\nworld clock is PAUSED - nobody is connected");

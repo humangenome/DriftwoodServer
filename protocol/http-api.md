@@ -138,6 +138,7 @@ own chat RPC invoked from the server, which every vanilla client renders as a `[
 ```
 help  status  players  version  world  save  snapshot  snapshots
 kick  block  unblock  blocked  say  audit
+money  island  spawn  killboss
 ```
 
 - `players` on this console carries the **SteamID64** beside each name — the caller authenticated,
@@ -162,6 +163,28 @@ kick  block  unblock  blocked  say  audit
   `console` for a remote caller that proved itself with the signed API secret, `server` for the
   block-list sweep itself. "Your host kicked me for no reason" arrives in a support ticket days
   later, and this line is the difference between an answer and a shrug.
+
+The gameplay commands ride the game's own host-gated dev suite (`DazedCommands` and the managers
+under it). No player can invoke that suite on a dedicated server; the host process is the host, so
+these are owner commands with the same audit trail as everything above. Each drives the underlying
+manager directly with server-appropriate arguments, because the game's own command layer reaches
+for a local player and a camera a headless host does not have:
+
+- `money` shows the crew's ONE shared wallet (that is the game's economy model, not a
+  simplification); `money add <n>` / `money remove <n>` change it, capped at 1,000,000 per
+  command, and the game itself clamps the wallet at zero.
+- `island` shows where the crew is, 1-based; `island next` / `island prev` are the game's own
+  island moves with its own wrap-around; `island set <n>` sails everyone to a specific island and
+  unlocks it first if the crew had not reached it - the command exists for stuck-progression
+  rescues, and teleporting a crew onto a locked island would leave the save disagreeing with
+  itself. Every island move teleports the whole crew to the island spawn together; that is how
+  the game itself changes islands.
+- `spawn <item>` drops one of the game's spawnable items (the in-game name, spaces optional) next
+  to a connected player. An empty server refuses rather than dropping the item where nobody
+  stands.
+- `killboss` deals the active boss a killing blow through the same server-side HP path a real hit
+  lands, so the death, the trophy and the progression follow the game's own kill flow. Refuses in
+  a sentence when no boss is up or the boss is in an invulnerable phase.
 
 `stop`, `restart`, `op` and friends are **named refusals**: they answer with where that thing
 actually lives rather than with "unknown command", which would read as a typo. Lifecycle

@@ -56,6 +56,13 @@ namespace DriftwoodHost
 		public string SteamWebApiKeyFile = string.Empty;
 		public string SteamWebApiKey = string.Empty;
 
+		// Discord alerts. OPTIONAL and fail-soft: unset means alerts are off and everything
+		// else works. On a managed server the customer's own file
+		// (<instance root>\Driftwood\discord-webhook.txt) outranks this key, because the panel
+		// rewrites this config on every start and would erase a hand-added value; the inline
+		// key exists for self-hosters and for the day the panel grows a webhook field.
+		public string DiscordWebhookUrl = string.Empty;
+
 		public string WorldName = "Driftwood";
 		public string SaveRoot = string.Empty;
 		public float AutoSaveMinutes = 5f;
@@ -143,6 +150,9 @@ namespace DriftwoodHost
 				"Identity.SteamWebApiKeyFile", "Http.SteamWebApiKeyFile", "SteamWebApiKeyFile");
 			config.SteamWebApiKey = config.String(config.SteamWebApiKey,
 				"Identity.SteamWebApiKey", "Http.SteamWebApiKey", "SteamWebApiKey");
+
+			config.DiscordWebhookUrl = config.String(config.DiscordWebhookUrl,
+				"Discord.WebhookUrl", "Discord.DiscordWebhookUrl", "DiscordWebhookUrl");
 
 			config.WorldName = config.String(config.WorldName,
 				"World.Name", "World.WorldName", "Server.WorldName", "WorldName", "world_name", "SaveName");

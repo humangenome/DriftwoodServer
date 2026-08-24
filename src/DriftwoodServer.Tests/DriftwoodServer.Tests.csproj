@@ -30,6 +30,13 @@
     <Compile Include="../../host-mod/DriftwoodHost/SteamProfileParser.cs" Link="Linked/SteamProfileParser.cs" />
     <Compile Include="../../host-mod/DriftwoodHost/Blocklist.cs" Link="Linked/Blocklist.cs" />
     <Compile Include="../../host-mod/DriftwoodHost/OwnerAudit.cs" Link="Linked/OwnerAudit.cs" />
+    <!-- The Discord alert pipe's pure parts: the webhook-URL gate (a customer-editable file must
+         never point this server's outbound POST at an arbitrary machine), the payload shape
+         (allowed_mentions pinned empty because half of every line is a player-chosen name), and
+         the join/leave diff. No Unity or BepInEx dependency; the HTTP worker is never started
+         here. Json.cs rides along because the payload builder uses it. -->
+    <Compile Include="../../host-mod/DriftwoodHost/Json.cs" Link="Linked/Json.cs" />
+    <Compile Include="../../host-mod/DriftwoodHost/DiscordAlerts.cs" Link="Linked/DiscordAlerts.cs" />
   </ItemGroup>
   <PropertyGroup>
     <NoWarn>$(NoWarn);CS8618;CS8600;CS8601;CS8602;CS8603;CS8604;CS8625</NoWarn>

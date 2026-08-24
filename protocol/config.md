@@ -59,6 +59,18 @@ SteamWebApiKeyFile = <path>    ; OPTIONAL. A file holding a Steam Web API key (3
 SteamWebApiKey = <key>         ; OPTIONAL, inline form of the same - a self-hoster's convenience
                                ; (their box, their config file). The file form wins when both set.
 
+[Discord]
+WebhookUrl = <url>             ; OPTIONAL. Joins/leaves, boss kills, island moves and blocked-join
+                               ; attempts are posted to this Discord webhook. Unset = alerts off,
+                               ; everything else works. The customer's own file
+                               ; <instance root>\Driftwood\discord-webhook.txt OUTRANKS this key
+                               ; (first non-empty, non-# line is the URL), because a hosting panel
+                               ; rewrites this config on every start and would erase a hand-added
+                               ; value. Only a genuine Discord webhook URL is accepted (https, a
+                               ; discord.com / discordapp.com host, an /api/webhooks/ path) - the
+                               ; value can be customer-typed, and anything looser is an outbound
+                               ; request-forgery primitive. Read at boot; changes take a restart.
+
 [World]
 Name = Driftwood               ; a FILENAME: the save is <SaveRoot>\<Name>.txt. Never "local".
 AutoSaveMinutes = 5            ; the game clamps 1-60

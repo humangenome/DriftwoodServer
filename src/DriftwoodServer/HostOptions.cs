@@ -46,6 +46,10 @@ internal sealed class HostOptions
     // The token the host mod requires on every mutating route of its HTTP API. It is the
     // customer's rcon password, so it is never logged and never written into a status file.
     public string AuthToken { get; set; } = string.Empty;
+    // Optional Discord webhook for join/leave, boss-kill, island-move and blocked-join alerts.
+    // Passed through to the host mod's [Discord] section; empty means alerts are off. The mod
+    // also honours <instance root>\Driftwood\discord-webhook.txt, which outranks this value.
+    public string DiscordWebhookUrl { get; set; } = string.Empty;
 
     public int WorldReadyTimeoutSeconds { get; set; } = 240;
     public int ReadinessStaleSeconds { get; set; } = 30;

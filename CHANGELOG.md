@@ -2,10 +2,32 @@
 
 All notable changes to DriftwoodServer are recorded here.
 
-## [Unreleased]
+## [0.1.2] - 2026-08-24
 
 ### Added
 
+- Owner gameplay commands on the console, built on the game's own host-gated dev suite
+  (no player can invoke it on a dedicated server; the host process is the host):
+  `money [add|remove <n>]` for the crew's one shared wallet, `island [next|prev|set <n>]`
+  to move the whole crew between islands (a `set` beyond the crew's progression unlocks the
+  island, deliberately - the command exists for stuck-progression rescues), `spawn <item>`
+  to drop any of the game's spawnable items next to a connected player, and `killboss` to
+  end a boss fight as a real kill - the same server-side hit path a legitimate kill takes,
+  so the trophy and the progression follow. Every mutation is audited like the rest of the
+  owner actions; every refusal says why in a sentence.
+- Discord alerts, opt-in via a webhook: joins and leaves (with real names once the Steam
+  Web API key is in place), boss kills, island moves, and blocked players who tried to come
+  back. The webhook comes from `<instance root>\Driftwood\discord-webhook.txt` (the
+  customer's own file, which survives config rewrites) or `[Discord] WebhookUrl` in the
+  plugin config; only a genuine Discord webhook URL is accepted, so the field can never
+  point the server's outbound requests at an arbitrary machine. Fail-soft throughout: a
+  dead webhook drops alerts with one warning and affects nothing else, and no join, page
+  or frame ever waits on Discord. The readiness document and `status` carry a one-sentence
+  `discordAlerts` state so "why no alerts" is answerable from the panel.
+- A shutdown warning in chat: when a stop or restart is requested through the stop file and
+  players are connected, the server now broadcasts a `[Server]` line telling the crew it is
+  saving and going down, and gives the message a moment to reach them before the transport
+  closes.
 - Real player names on the roster. The game never transmits a name — each client resolves the
   replicated SteamID64 through its own Steam client, which a headless host does not have — so the
   roster showed stable synthetic placeholders. With a Steam Web API key configured

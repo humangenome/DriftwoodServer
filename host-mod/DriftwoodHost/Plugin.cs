@@ -24,7 +24,7 @@ namespace DriftwoodHost
 	public class Plugin : BaseUnityPlugin
 	{
 		public const string Guid = "com.humangenome.driftwood.host";
-		public const string Version = "0.1.1";
+		public const string Version = "0.1.2";
 
 		internal static ManualLogSource Log;
 
@@ -191,6 +191,26 @@ namespace DriftwoodHost
 				Logger.LogInfo("Blocklist loaded: " + Blocklist.Count + " blocked player(s) will be kept out.");
 			}
 			SteamNameResolver.Initialise(_config, stateDirectory);
+
+			// Discord alerts, after the audit/blocklist/name layers they report on. Fail-soft by
+			// contract: no webhook (or a bad one) means alerts are off with one explanatory line,
+			// and nothing else changes. The boss-kill hook is wired in its own method so a game
+			// build that moved BossManager degrades to "no boss alerts" instead of a failed boot.
+			DiscordAlerts.LogWarning = message => Log?.LogWarning(message);
+			DiscordAlerts.LogInfo = message => Log?.LogInfo(message);
+			DiscordAlerts.Initialise(_config, instanceRoot, Version);
+			if (DiscordAlerts.Enabled)
+			{
+				try
+				{
+					SubscribeBossAlerts();
+				}
+				catch (Exception exception)
+				{
+					Logger.LogWarning("Boss-kill alerts could not be wired (" + exception.GetType().Name +
+						"); joins, leaves and the other alerts still work.");
+				}
+			}
 
 			GhostHost.Suppress = _config.SuppressGhostHost;
 			EmptyWorldPause.Enabled = _config.PauseWorldWhenEmpty;
@@ -573,6 +593,16 @@ namespace DriftwoodHost
 				// already knows who is connected.
 				SteamNameResolver.Request(rosterIds);
 				OwnerActions.EnforceBlocklist();
+				// Discord join/leave and island-move alerts ride the same walk: a set diff and a
+				// byte compare on the main thread, with the HTTP on the alert pipe's own thread.
+				DiscordAlerts.ObserveRoster(rosterIds, rosterNames, _config.MaxPlayers);
+				OnlineIslandManager islandManager = OnlineIslandManager.Instance;
+				if (_readiness.WorldRunning && islandManager != null)
+				{
+					DiscordAlerts.ObserveIsland(islandManager._curIsland.Value + 1,
+						Math.Max(0, IslandManager.TotalIslands - 1));
+				}
+				_readiness.DiscordAlertsState = DiscordAlerts.State;
 				_readiness.SteamNameResolution = SteamNameResolver.State;
 				_readiness.BlockedPlayers = Blocklist.Count;
 				List<string> roster = PlayerDirectory.IdentifiedRoster();
@@ -636,6 +666,26 @@ namespace DriftwoodHost
 				_readiness.Reason = "Saving and shutting down";
 				_readiness.Write();
 
+				// Tell the crew before the lights go out. The stop file cannot say whether this
+				// is a stop or a restart, so the line covers both. The short realtime wait after
+				// a successful broadcast is what lets the chat RPC actually reach the clients -
+				// the transport closes moments later - and it only costs anything when somebody
+				// was connected to hear it. Bounded well inside the supervisor's graceful window.
+				bool crewWarned = false;
+				try
+				{
+					if (PlayerDirectory.Snapshot().Count > 0)
+					{
+						crewWarned = OwnerActions.Broadcast(
+							"Saving the world and shutting down - if this is a restart, the server will be back in about a minute.") == null;
+					}
+				}
+				catch (Exception exception)
+				{
+					Logger.LogWarning("Shutdown broadcast failed: " + exception.Message);
+				}
+				if (crewWarned) yield return new WaitForSecondsRealtime(1.5f);
+
 				// Save explicitly, then let the game quit cleanly - SaveManager.OnApplicationQuit
 				// saves again on the way out, and Server.OnStopServer saves once more when the
 				// server connection stops. Three chances, one of which does not depend on us.
@@ -673,6 +723,8 @@ namespace DriftwoodHost
 				try { _readiness.Write(); } catch (Exception exception) { Logger.LogWarning("Final readiness write failed: " + exception.Message); }
 
 				TryDelete(_stopFilePath);
+				// Give any queued Discord lines one bounded chance to land before the process ends.
+				try { DiscordAlerts.StopAndFlush(1000); } catch { }
 				try { _api?.Dispose(); } catch { }
 				Application.Quit(0);
 			}
@@ -767,6 +819,25 @@ namespace DriftwoodHost
 			yield return new WaitForSecondsRealtime(15f);
 			Logger.LogError("The process did not end after Application.Quit; forcing it.");
 			HardExit();
+		}
+
+		// NOT INLINED, so the BossManager type only loads inside the caller's try. If a future
+		// game build moves or reshapes BossManager, the TypeLoadException lands in that catch
+		// and costs boss alerts - never the boot.
+		[System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+		private static void SubscribeBossAlerts()
+		{
+			BossManager.OnGlobalBossDeath += () =>
+			{
+				// This handler runs inside the game's own boss-death path; nothing may escape it.
+				try
+				{
+					string name = null;
+					try { name = BossManager.Boss != null ? BossManager.Boss.GetName() : null; } catch { }
+					DiscordAlerts.BossDefeated(name);
+				}
+				catch { }
+			};
 		}
 
 		private static void HardExit()

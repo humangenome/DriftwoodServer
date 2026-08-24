@@ -81,6 +81,9 @@ namespace DriftwoodHost
 		public string SteamNameResolution = string.Empty;
 		// How many SteamIDs the owner's block list currently holds. Zero is the normal state.
 		public int BlockedPlayers;
+		// One plain sentence from the Discord alert pipe, same contract as the name resolver's:
+		// "off (...)" / "ok (N sent this run)" / "failing (...)".
+		public string DiscordAlertsState = string.Empty;
 		public bool LoopIdling;
 		public int IdleTransitions;
 		public int WorldResumeCount;
@@ -175,6 +178,7 @@ namespace DriftwoodHost
 					.Add("displayNamesResolved", DisplayNamesResolved)
 					.Add("steamNameResolution", SteamNameResolution)
 					.Add("blockedPlayers", BlockedPlayers)
+					.Add("discordAlerts", DiscordAlertsState)
 					.Add("effectiveBindAddress", EffectiveBindAddress)
 					.Add("effectiveTargetFrameRate", EffectiveTargetFrameRate)
 					.Add("actualFrameRate", ActualFrameRate)

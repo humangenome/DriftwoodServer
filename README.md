@@ -98,6 +98,10 @@ Copy [`appsettings.example.json`](appsettings.example.json) from the folder you 
   Set one; without it every admin route refuses.
 - `gamePort`: the UDP port players connect to. `httpPort` stays `0`: the status/admin API then
   takes the port directly above `gamePort` on its own.
+- `discordWebhookUrl` (optional): a Discord webhook URL, and the server posts joins and leaves,
+  boss kills, island moves and blocked-join attempts to that channel. Leave it `""` for no
+  alerts. A file named `discord-webhook.txt` in `C:\Driftwood\my-server\Driftwood\` does the
+  same and wins when both are set.
 
 Leave `worldName` alone once the server has run. Renaming it later starts a fresh world under the
 new name; the old world stays in `Saves\` under the old one.

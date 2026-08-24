@@ -52,6 +52,14 @@ internal static class PluginConfigWriter
         text.AppendLine("[Host]");
         text.AppendLine($"SuppressGhostHost = {Bool(options.SuppressGhostHost)}");
         text.AppendLine();
+        // Optional and fail-soft on the mod side; only written when set, so the common case
+        // stays byte-identical to what every existing server already runs.
+        if (!string.IsNullOrWhiteSpace(options.DiscordWebhookUrl))
+        {
+            text.AppendLine("[Discord]");
+            text.AppendLine($"WebhookUrl = {Sanitise(options.DiscordWebhookUrl.Trim(), 200)}");
+            text.AppendLine();
+        }
         text.AppendLine("[Performance]");
         text.AppendLine($"PauseWorldWhenEmpty = {Bool(options.PauseWorldWhenEmpty)}");
         text.AppendLine(Line("IdleFrameRate", options.IdleFrameRate));
@@ -115,6 +123,6 @@ internal static class PluginConfigWriter
 
     // BepInEx config values are line-terminated, so a newline in a customer-supplied name would
     // inject a key. Strip control characters rather than trusting the caller.
-    private static string Sanitise(string value) =>
-        new(( value ?? string.Empty).Where(c => !char.IsControl(c)).Take(80).ToArray());
+    private static string Sanitise(string value, int cap = 80) =>
+        new(( value ?? string.Empty).Where(c => !char.IsControl(c)).Take(cap).ToArray());
 }

@@ -162,6 +162,7 @@ namespace DriftwoodHost
 				if (failure == null)
 				{
 					Plugin.Log?.LogInfo("Blocked player " + target.SteamId + " connected and was removed.");
+					DiscordAlerts.BlockedPlayerRejected(target.SteamId, target.Name);
 				}
 			}
 		}
