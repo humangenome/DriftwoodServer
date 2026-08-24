@@ -31,6 +31,31 @@ internal sealed class GameProcess : IAsyncDisposable
             throw new FileNotFoundException("The game executable is missing from this server's folder.", executable);
         }
         Directory.CreateDirectory(options.StateRoot);
+
+        // The game will not run outside Steam without steam_appid.txt next to the executable:
+        // SteamAPI.RestartAppIfNecessary fires and the Heathen wrapper calls Application.Quit()
+        // - exit code 0, clean log, nothing to debug. The fleet's installer writes this file; a
+        // self-host install built from docs/self-hosting.md has nobody else to do it, so the
+        // supervisor owns it the same way it owns the host mod's configuration. Proven on the
+        // first executed walk of that doc: without this file every start died loading the world,
+        // with it the same install hosted.
+        string steamAppIdPath = Path.Combine(options.GameRoot, "steam_appid.txt");
+        string steamAppId = options.PinnedBuild.AppId.ToString();
+        try
+        {
+            if (!File.Exists(steamAppIdPath)
+                || !string.Equals(File.ReadAllText(steamAppIdPath).Trim(), steamAppId, StringComparison.Ordinal))
+            {
+                File.WriteAllText(steamAppIdPath, steamAppId);
+            }
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException(
+                $"Could not write steam_appid.txt into the game folder ({steamAppIdPath}). Without it the game exits during boot with a clean log and no error.",
+                exception);
+        }
+
         TextWriter log = TextWriter.Synchronized(
             new RotatingFileTextWriter(Path.Combine(options.StateRoot, "driftwood-supervisor-game.log"), MaxGameLogBytes));
 
