@@ -116,6 +116,20 @@ internal sealed class HostApplication
                         requestedStop = true;
                         break;
                     }
+                    // A stop file is normally consumed by the host mod: it saves, writes a final
+                    // "Stopped" readiness document, deletes the file, and quits. By the time the
+                    // exit lands here the file is already gone - so without this check every
+                    // clean requested stop is reported as "stopped unexpectedly", which reads
+                    // like a crash to exactly the operator who just followed the manual. The
+                    // readiness document is deleted before every start, so a "Stopped" phase can
+                    // only have been written by this run's own deliberate shutdown.
+                    ReadinessDocument? finalReadiness = ReadinessDocument.TryRead(_options.ReadinessPath);
+                    if (finalReadiness is not null
+                        && string.Equals(finalReadiness.Phase, "Stopped", StringComparison.OrdinalIgnoreCase))
+                    {
+                        requestedStop = true;
+                        break;
+                    }
                     Refuse($"This server stopped unexpectedly (exit code {exitCode}).", pinnedBuildId);
                     return;
                 }

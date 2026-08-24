@@ -172,8 +172,13 @@ public class HostConfigTests : IDisposable
         // Without this the mod cannot locate Logs\, never writes the markers the panel asserts on,
         // and every server reports Stopped.
         HostConfig config = Load(Minimal);
-        Assert.Equal("/srv/941353", config.ResolveInstanceRoot("/srv/941353/How to Fish"));
-        Assert.Equal(Path.Combine("/srv/941353", "Logs"), config.ResolveLogsDirectory("/srv/941353/How to Fish"));
+        // A platform-appropriate absolute path: resolution runs through Path.GetFullPath, which
+        // drive-qualifies a rootless path on Windows - and Windows is the platform this product
+        // actually ships on, so the suite must be green there, not only on the Linux CI image.
+        string root = OperatingSystem.IsWindows() ? "C:\\srv\\941353" : "/srv/941353";
+        string gameDir = Path.Combine(root, "How to Fish");
+        Assert.Equal(root, config.ResolveInstanceRoot(gameDir));
+        Assert.Equal(Path.Combine(root, "Logs"), config.ResolveLogsDirectory(gameDir));
     }
 
     [Fact]

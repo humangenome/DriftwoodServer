@@ -36,7 +36,11 @@ public class ExampleConfigTests
         try { options = HostOptions.Load(temporary); }
         finally { try { File.Delete(temporary); } catch { } }
         Assert.Equal(22003, options.GamePort);
-        Assert.Equal(22004, options.HttpPort);
+        // Zero, deliberately: the host mod takes gamePort + 1 for its API on its own, and
+        // a nonzero httpPort of 22004 makes the supervisor's health endpoint claim the
+        // port first - the mod then refuses to host. The executed self-hosting walk hit
+        // exactly that with the old example value.
+        Assert.Equal(0, options.HttpPort);
         Assert.True(options.SuppressGhostHost);
         // Off by default: standing the world down is only safe once resumption is proven with a
         // retail client.
