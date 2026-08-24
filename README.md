@@ -1,73 +1,159 @@
 # DriftwoodServer
 
-The dedicated-server supervisor and host mod behind **Driftwood**, dedicated server hosting for
-[How to Fish](https://store.steampowered.com/app/4001890/).
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![.NET 8](https://img.shields.io/badge/.NET-8.0-blueviolet.svg)](https://dotnet.microsoft.com/en-us/download/dotnet/8.0)
+[![Platform](https://img.shields.io/badge/Platform-Windows_x64-blue.svg)](#what-you-need)
+[![Game](https://img.shields.io/badge/Game-How_to_Fish-4aa3df.svg)](https://store.steampowered.com/app/4001890/)
 
-How to Fish ships no dedicated server, but it does ship a complete dedicated-server *code path*:
-single-player starts a real FishNet server on a raw-UDP transport and connects a local client to
-it. Driftwood drives that path headlessly, keeps the world persistent, hides the host's own
-placeholder player, and refuses to host rather than hosting nothing.
+DriftwoodServer runs an always-on dedicated server for
+[How to Fish](https://store.steampowered.com/app/4001890/). The game does not ship one; this
+package adds one. The world lives on the server and keeps going whether or not anyone is online,
+and everyone joins it with the [Driftwood app](https://github.com/HumanGenome/Driftwood), you
+included.
 
-## What is here
+The rest of this page sets one up on a Windows machine you control, start to finish. What changed
+in each release is in [CHANGELOG.md](CHANGELOG.md).
 
-| | |
-|---|---|
-| `host-mod/DriftwoodHost` | The BepInEx 5 plugin that runs inside the game. Starts the server on the game's own transport, loads or creates the world, enforces the slot limit, hides the host's placeholder player, guards every Steam call, keeps the process silent, and publishes a readiness signal. |
-| `src/DriftwoodServer` | The .NET 8 supervisor. Verifies the pinned game build before anything starts, owns the game process and its logs, consumes the readiness signal, and serves a health endpoint. |
-| `bench/` | Measurement rigs. Never shipped — see `bench/NOT-SHIPPED.md`. |
+## What you need
 
-## Run your own server
+- Windows 10 / 11 / Server, x64
+- Your own Steam copy of How to Fish, installed. The server runs the game's files, and this repo
+  ships none of them.
+- [Git](https://git-scm.com/downloads) and the
+  [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0), both free, used once in step 4
+- Two open ports: one UDP port for the game, plus the TCP port directly above it
 
-[docs/self-hosting.md](docs/self-hosting.md) walks the whole thing end to end on a Windows machine
-you control: copy your own game files, install the release overlay, build the supervisor, pin the
-build, open two ports, start. How to Fish ships no dedicated server, so this repo is the only way
-to run one — hosted by us or by you.
-
-## Design rules this codebase is built around
-
-**A server that cannot host must not present a port.** Every patch target is resolved before any
-patch is applied, every miss is reported in one block, and the count of what was actually patched
-is asserted against the patch library rather than inferred. A required patch missing is a refusal
-with one plain sentence naming what failed.
-
-**Readiness means the world is running, not that the port is open.** The gameplay port binds
-before the world exists, so process-alive, port-listening and "the process answered" are all
-equally true of a server whose entire mod stack failed to apply. The only signal anything consumes
-is derived from the world actually being up, and if the world never arrives the port is closed
-again so the server reports as down rather than as a healthy server with nothing behind it.
-
-**An unknown player count stays unknown.** Zero is what marks a server empty and empty servers get
-reaped, so an unknown population is reported as unknown and never coerced to zero.
-
-**Catching is not fixing.** Two patches deliberately swallow exceptions from methods that must
-keep running. Every swallow is counted, the rate is alarmed on, and the totals are published — a
-handler firing thousands of times a second is a broken feature wearing a seatbelt.
-
-## Building
+## 1. Make the folders
 
 ```
-dotnet build src/DriftwoodServer/DriftwoodServer.csproj -c Release
-dotnet test  src/DriftwoodServer.Tests/DriftwoodServer.Tests.csproj -c Release
+C:\Driftwood\my-server\
+  How to Fish\        your copy of the game's files
+  Saves\              the world lives here
+  host-state\         status, logs, the stop file
+  Backups\
+  bin\                the supervisor
+  appsettings.json
 ```
 
-The host mod compiles against the game's own assemblies. Point `ManagedDir` at a real install:
+The world, the logs and the state live outside the game folder, so nothing that replaces game
+files can touch your world. (`appsettings.json` is created in step 5.)
+
+## 2. Copy the game
+
+Copy your installed game folder, by default
+`C:\Program Files (x86)\Steam\steamapps\common\How to Fish`, to
+`C:\Driftwood\my-server\How to Fish`. Copy it; never point the server at the Steam install
+itself. Steam updates the original whenever it likes, and a server should take a game update when
+you decide to (step 5 makes that a checked decision instead of an accident).
+
+Optional: also copy `steamapps\appmanifest_4001890.acf` into `C:\Driftwood\my-server\steamapps\`.
+The build check in step 5 then reads Steam's own install record too.
+
+## 3. Add the server files to the game
+
+Download `DriftwoodServer-<version>.zip` from the
+[latest release](https://github.com/HumanGenome/DriftwoodServer/releases/latest) and extract it
+somewhere temporary, not into the game folder. Everything in the zip nests under
+`DriftwoodServer\bepinex\`, and extracted straight into the game folder nothing loads: the game
+boots vanilla, silently, with no error anywhere.
+
+Copy the pieces in from where you extracted them:
+
+```powershell
+$overlay = "C:\Driftwood\overlay\DriftwoodServer\bepinex"   # wherever you extracted it
+$game    = "C:\Driftwood\my-server\How to Fish"
+Copy-Item "$overlay\winhttp.dll"         $game
+Copy-Item "$overlay\doorstop_config.ini" $game
+Copy-Item "$overlay\BepInEx"             $game -Recurse -Force
+```
+
+Done when `winhttp.dll` and `doorstop_config.ini` sit next to `How to Fish.exe`, and
+`BepInEx\plugins\DriftwoodHost.dll` exists.
+
+## 4. Build the supervisor
+
+The supervisor is the program that starts the server, watches it, and takes the backups. The
+release zip does not include it; build it from this repo with two commands:
+
+```powershell
+git clone https://github.com/HumanGenome/DriftwoodServer.git
+dotnet publish DriftwoodServer/src/DriftwoodServer/DriftwoodServer.csproj -c Release -o C:\Driftwood\my-server\bin
+```
+
+## 5. Fill in the config, and pin the build
+
+Copy [`appsettings.example.json`](appsettings.example.json) from the folder you just cloned to
+`C:\Driftwood\my-server\appsettings.json`, open it in any text editor, and set:
+
+- every path to your layout from step 1 (`instanceId` is any short name, e.g. `my-server`)
+- `steamAppsDirectory`: your `steamapps` copy from step 2, or `""` if you skipped it
+- `serverName`: what players see in the Driftwood app
+- `authToken`: the admin password for this server's console and backups in the Driftwood app.
+  Set one; without it every admin route refuses.
+- `gamePort`: the UDP port players connect to. `httpPort` stays `0`: the status/admin API then
+  takes the port directly above `gamePort` on its own.
+
+Leave `worldName` alone once the server has run. Renaming it later starts a fresh world under the
+new name; the old world stays in `Saves\` under the old one.
+
+Last, pin the game build. The server refuses to start until you pin the build you copied, and
+that is what stops a Steam update from silently breaking your server. Set
+`pinnedBuild.assemblySha256` to 64 zeros, then ask the install for its real values:
+
+```powershell
+C:\Driftwood\my-server\bin\DriftwoodServer.exe --verify-build C:\Driftwood\my-server\appsettings.json
+```
+
+It prints `BUILD_PIN_FAILED` plus the truth:
 
 ```
-dotnet build host-mod/DriftwoodHost/DriftwoodHost.csproj -c Release \
-  -p:ManagedDir="C:\Path\To\How to Fish\How to Fish_Data\Managed"
+assemblySha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+steamBuildId=19842631
 ```
 
-Game binaries are never committed.
+Paste both into `pinnedBuild` (`buildId` stays `""` if you skipped the steamapps copy), run it
+again, and expect `BUILD_PIN_OK`.
 
-## Verifying an install without starting it
+When Steam updates the game: update your Steam copy, re-copy the game folder, re-run
+`--verify-build`, and paste in the new values. If the update moved something the server depends
+on, it names what moved and refuses to host broken; take the next release of this package.
+
+## 6. Open the ports
+
+```powershell
+New-NetFirewallRule -DisplayName "Driftwood game" -Direction Inbound -Protocol UDP -LocalPort 22003 -Action Allow
+New-NetFirewallRule -DisplayName "Driftwood api"  -Direction Inbound -Protocol TCP -LocalPort 22004 -Action Allow
+```
+
+Use your `gamePort` and `gamePort + 1`. Hosting from home, forward both on your router too.
+
+## 7. Start it
+
+```powershell
+C:\Driftwood\my-server\bin\DriftwoodServer.exe --config C:\Driftwood\my-server\appsettings.json
+```
+
+Two lines mean it worked. First `BUILD_PIN_OK`, then, after the world loads (give a fresh world a
+few minutes):
 
 ```
-DriftwoodServer --verify-build appsettings.json
+DRIFTWOOD_HOSTING port=22003 slots=8 world=Driftwood pid=4242
 ```
 
-Only `Assembly-CSharp.dll` identifies a build — the Unity launcher stub does not change between
-versions — so the pin is that assembly's hash, cross-checked against Steam's own install record
-for a queued, failed or half-applied update.
+Everyone joins from the Driftwood app: add `<your address>:22003`, **Connect**.
+
+## 8. Stop, back up, keep it running
+
+- **Stop:** `Ctrl+C` in the console, or create a file named `stop.requested` in `host-state\`.
+  Either way the world is saved before the process exits.
+- **Back up, while it runs:** `DriftwoodServer.exe --snapshot appsettings.json` saves the world
+  and zips it into `Backups\`.
+- **It will not start?** Read `host-state\host-ready.json`. `reason` is one plain sentence, and
+  the common ones are decoded in [docs/operations.md](docs/operations.md). The game's own output
+  is in `host-state\unity.log`.
+- **Survive reboots:** a Task Scheduler task, *At startup*, running the step 7 command.
+- **More servers on the same box:** repeat from step 1 in a second directory with its own ports,
+  ten apart (22013, 22023, ...).
 
 ## Official hosting
 

@@ -31,7 +31,7 @@ All notable changes to DriftwoodServer are recorded here.
 
 - The supervisor now writes `steam_appid.txt` into the game folder before every launch. Without
   that file the game's Steam wrapper quits during boot - exit code 0, clean log - so a server
-  built by following `docs/self-hosting.md` failed on its very first start: the fleet's installer
+  built by following the README's self-hosting guide failed on its very first start: the fleet's installer
   writes the file, but a self-host install had nobody to do it. Found by executing the
   self-hosting walkthrough end to end on a clean machine.
 - `appsettings.example.json` now ships `httpPort: 0`, which the self-hosting guide already

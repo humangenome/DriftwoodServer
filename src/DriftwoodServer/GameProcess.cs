@@ -35,7 +35,7 @@ internal sealed class GameProcess : IAsyncDisposable
         // The game will not run outside Steam without steam_appid.txt next to the executable:
         // SteamAPI.RestartAppIfNecessary fires and the Heathen wrapper calls Application.Quit()
         // - exit code 0, clean log, nothing to debug. The fleet's installer writes this file; a
-        // self-host install built from docs/self-hosting.md has nobody else to do it, so the
+        // self-host install built from the README's self-hosting guide has nobody else to do it, so the
         // supervisor owns it the same way it owns the host mod's configuration. Proven on the
         // first executed walk of that doc: without this file every start died loading the world,
         // with it the same install hosted.
