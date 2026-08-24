@@ -11,8 +11,14 @@ package adds one. The world lives on the server and keeps going whether or not a
 and everyone joins it with the [Driftwood app](https://github.com/HumanGenome/Driftwood), you
 included.
 
-The rest of this page sets one up on a Windows machine you control, start to finish. What changed
-in each release is in [CHANGELOG.md](CHANGELOG.md).
+Driftwood is third-party software and is not affiliated with or endorsed by Dazed Games. Every
+player needs their own Steam copy of the game.
+
+The rest of this page sets one up on a Windows machine you control, start to finish. If you would
+rather rent one,
+[SurvivalServers.com](https://www.survivalservers.com/services/game_servers/how_to_fish/?utm_source=github&utm_medium=readme&utm_campaign=driftwoodserver)
+runs How to Fish servers with Driftwood installed and kept on the latest release. What changed in
+each release is in [CHANGELOG.md](CHANGELOG.md).
 
 ## What you need
 
@@ -154,13 +160,6 @@ Everyone joins from the Driftwood app: add `<your address>:22003`, **Connect**.
 - **Survive reboots:** a Task Scheduler task, *At startup*, running the step 7 command.
 - **More servers on the same box:** repeat from step 1 in a second directory with its own ports,
   ten apart (22013, 22023, ...).
-
-## Official hosting
-
-DriftwoodServer is officially supported by
-[SurvivalServers.com](https://www.survivalservers.com/services/game_servers/how_to_fish/?utm_source=github&utm_medium=readme&utm_campaign=driftwoodserver),
-which runs How to Fish servers with Driftwood installed and kept on the latest pinned
-release.
 
 ## License
 
