@@ -104,7 +104,10 @@ namespace DriftwoodHost
 			{
 				foreach (ulong id in steamIds)
 				{
-					if (id == 0UL || id == DriftwoodIdentity.HostSteamId) continue;
+					// The whole synthetic range, not just the host placeholder: 1.0.6 spawn
+					// identities are ours too, and the Steam Web API has nothing to say about
+					// ids that were never issued.
+					if (id == 0UL || DriftwoodIdentity.IsSynthetic(id)) continue;
 					if (NegativeUnix.TryGetValue(id, out long negativeAt) && now - negativeAt < NegativeSeconds) continue;
 					if (ResolvedUnix.TryGetValue(id, out long resolvedAt) && now - resolvedAt < RefreshSeconds) continue;
 					Wanted.Add(id);

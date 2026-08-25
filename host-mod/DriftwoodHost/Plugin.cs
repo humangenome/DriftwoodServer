@@ -24,7 +24,7 @@ namespace DriftwoodHost
 	public class Plugin : BaseUnityPlugin
 	{
 		public const string Guid = "com.humangenome.driftwood.host";
-		public const string Version = "0.1.4";
+		public const string Version = "0.1.5";
 
 		internal static ManualLogSource Log;
 
@@ -229,6 +229,7 @@ namespace DriftwoodHost
 			targets.AddRange(SteamGuards.Targets());
 			targets.AddRange(HeadlessPatches.Targets());
 			targets.AddRange(GhostHost.Targets());
+			targets.AddRange(SpawnIdentity.Targets());
 			targets.Add(SlotGuard.RefusalCounterTarget());
 
 			if (!string.IsNullOrWhiteSpace(_config.SimulateMissingPatch))

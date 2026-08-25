@@ -106,7 +106,10 @@ namespace DriftwoodHost
 
 		private static bool GetSteamId(ref CSteamID __result)
 		{
-			__result = new CSteamID(DriftwoodIdentity.HostSteamId);
+			// Not a constant any more: game 1.0.6 calls this ON THE SERVER to decide who a
+			// joining player IS (see SpawnIdentity). Outside a remote spawn it still answers
+			// the host placeholder.
+			__result = new CSteamID(SpawnIdentity.CurrentIdentity());
 			return false;
 		}
 

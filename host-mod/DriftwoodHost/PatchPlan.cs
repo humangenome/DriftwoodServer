@@ -47,6 +47,12 @@ namespace DriftwoodHost
 	{
 		public string TypeName;
 		public string MethodName;
+		// When set, the method is found by NAME PREFIX instead of exact name - for the game's
+		// codegen methods whose names carry a hash that moves on every rebuild
+		// (RpcReader___SpawnPlayer___596900633 on 1.0.4 vs ___1871804056 on 1.0.6). Exactly one
+		// declared method may match; two matches mean the shape drifted, and the target
+		// resolves as missing rather than guessing.
+		public string MethodNamePrefix;
 		public Type[] Parameters;
 		public PatchKind Kind = PatchKind.Skip;
 		public PatchNecessity Necessity = PatchNecessity.Optional;
@@ -133,9 +139,27 @@ namespace DriftwoodHost
 						target.Outcome = ResolveOutcome.Missing;
 						continue;
 					}
-					MethodInfo method = target.Parameters == null
-						? AccessTools.Method(type, target.MethodName)
-						: AccessTools.Method(type, target.MethodName, target.Parameters);
+					MethodInfo method;
+					if (!string.IsNullOrEmpty(target.MethodNamePrefix))
+					{
+						method = null;
+						bool ambiguous = false;
+						foreach (MethodInfo candidate in type.GetMethods(
+							BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public |
+							BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
+						{
+							if (!candidate.Name.StartsWith(target.MethodNamePrefix, StringComparison.Ordinal)) continue;
+							if (method != null) { ambiguous = true; break; }
+							method = candidate;
+						}
+						if (ambiguous) method = null;
+					}
+					else
+					{
+						method = target.Parameters == null
+							? AccessTools.Method(type, target.MethodName)
+							: AccessTools.Method(type, target.MethodName, target.Parameters);
+					}
 					if (method == null)
 					{
 						target.Outcome = ResolveOutcome.Missing;

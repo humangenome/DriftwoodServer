@@ -2,6 +2,30 @@
 
 All notable changes to DriftwoodServer are recorded here.
 
+## [0.1.5] - 2026-08-25
+
+### Fixed
+
+- Every player spawning as the server. Game 1.0.6 removed the `steamID` parameter from
+  `SpawnPlayer` - the client no longer tells the server who it is. On the non-Steam
+  transport this product uses, the game now derives a joining player's identity ON THE
+  SERVER from `SteamUser.GetSteamID()`, which a headless host guards to return the
+  reserved host placeholder. So every joiner became `76561190000000001`: one shared
+  per-player save record for the whole crew, and the roster's ghost-host filter hid
+  every real player from the roster, the map, kick, block and the Discord alerts -
+  which is why 0.1.4's connection-table fix still showed an empty roster on 1.0.6.
+  While the game's own `SpawnPlayer` RPC reader is executing for a remote connection,
+  the identity guard now answers a per-connection synthetic id from the same reserved
+  sub-account space (`76561190000100000 + connectionId`), so every member of the crew
+  is distinct, none of them is ever the host, and each gets their own save record.
+  The real SteamID64 never crosses the wire on this game build, so real identities
+  (and real persona names) are not knowable server-side; rosters on 1.0.6 show stable
+  `Player-NNNN` placeholder names instead. The Steam name resolver skips the entire
+  synthetic range rather than asking the Steam Web API about ids that were never issued.
+- The game's codegen RPC methods are found by name prefix with a refuse-on-ambiguity
+  rule, because their names carry a hash that moves on every game rebuild
+  (`RpcReader___SpawnPlayer___596900633` on 1.0.4 vs `___1871804056` on 1.0.6).
+
 ## [0.1.4] - 2026-08-25
 
 ### Fixed
