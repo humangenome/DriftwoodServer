@@ -64,6 +64,7 @@ namespace DriftwoodHost
 			// FIRST, before anything can make a sound. -batchmode does NOT guarantee silence: on
 			// a box with an audio device FMOD finds it and plays, which leaked game audio onto the
 			// operator's desktop during a probe run.
+			Silence.LogWarning = message => Log?.LogWarning(message);
 			Silence.Install();
 
 			// Read the panel's file directly rather than through BepInEx's binder, so a key the
