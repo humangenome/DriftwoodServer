@@ -43,6 +43,11 @@
          and proven here. The connection-table half stays in IdentityClaims.cs and is
          proven on the canary instead. -->
     <Compile Include="../../host-mod/DriftwoodHost/IdentityClaimRules.cs" Link="Linked/IdentityClaimRules.cs" />
+    <!-- The player-facing layer's pure parts: the chat-command parser (which lines the server
+         eats and which it relays) with its throttle, and the catch leaderboard's arithmetic,
+         ordering and on-disk round trip. Neither binds Unity, BepInEx or a game type. -->
+    <Compile Include="../../host-mod/DriftwoodHost/PlayerCommands.cs" Link="Linked/PlayerCommands.cs" />
+    <Compile Include="../../host-mod/DriftwoodHost/CatchLedger.cs" Link="Linked/CatchLedger.cs" />
   </ItemGroup>
   <PropertyGroup>
     <NoWarn>$(NoWarn);CS8618;CS8600;CS8601;CS8602;CS8603;CS8604;CS8625</NoWarn>

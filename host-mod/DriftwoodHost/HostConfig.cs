@@ -71,6 +71,17 @@ namespace DriftwoodHost
 		public bool DiscordAlertIsland = true;
 		public bool DiscordAlertBlocked = true;
 
+		// Player chat commands (!stuck, !playtime, !top, !help) typed into the game's ordinary
+		// chat, and the per-player cooldown on the teleport. ON by default: they need nothing
+		// installed and answer the two support questions this game generates most. The owner
+		// can switch them off; the cooldown floor keeps the teleport from becoming a free
+		// escape key.
+		public bool PlayerChatCommands = true;
+		public float StuckCooldownSeconds = 60f;
+		// The catch leaderboard (per-player catches, earnings, bosses, playtime), kept beside
+		// the world save. ON by default; it costs one dictionary write per bite.
+		public bool Leaderboard = true;
+
 		public string WorldName = "Driftwood";
 		public string SaveRoot = string.Empty;
 		public float AutoSaveMinutes = 5f;
@@ -169,6 +180,13 @@ namespace DriftwoodHost
 				"Discord.AlertIsland", "Discord.Island", "DiscordAlertIsland");
 			config.DiscordAlertBlocked = config.Bool(config.DiscordAlertBlocked,
 				"Discord.AlertBlocked", "Discord.Blocked", "DiscordAlertBlocked");
+
+			config.PlayerChatCommands = config.Bool(config.PlayerChatCommands,
+				"Chat.PlayerCommands", "Chat.Commands", "Chat.Enabled", "PlayerChatCommands", "ChatCommands");
+			config.StuckCooldownSeconds = config.Float(config.StuckCooldownSeconds,
+				"Chat.StuckCooldownSeconds", "Chat.StuckCooldown", "StuckCooldownSeconds");
+			config.Leaderboard = config.Bool(config.Leaderboard,
+				"Leaderboard.Enabled", "Leaderboard.Leaderboard", "Leaderboard", "CatchLeaderboard");
 
 			config.WorldName = config.String(config.WorldName,
 				"World.Name", "World.WorldName", "Server.WorldName", "WorldName", "world_name", "SaveName");

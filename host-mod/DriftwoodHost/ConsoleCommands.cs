@@ -34,7 +34,8 @@ namespace DriftwoodHost
 		{
 			"help", "status", "players", "version", "world", "save", "snapshot", "snapshots",
 			"kick", "block", "unblock", "blocked", "say", "audit",
-			"money", "island", "spawn", "killboss"
+			"money", "island", "spawn", "killboss",
+			"rescue", "top"
 		};
 
 		// How long a command may wait for the main thread. Generous against a busy frame, small
@@ -166,6 +167,17 @@ namespace DriftwoodHost
 
 				case "killboss":
 					return KillBoss(actor, out output);
+
+				// The player-facing layer, from the owner's side: the same teleport a player
+				// gets with "!stuck", aimed at a named player, and the catch leaderboard.
+				case "rescue":
+				case "unstuck":
+					return Rescue(actor, args, out output);
+
+				case "top":
+				case "leaderboard":
+					output = Top(args);
+					return true;
 
 				// Named refusals. Each is a thing a player reasonably expects a server console
 				// to do, and each answers with where that thing actually is rather than with
@@ -549,6 +561,82 @@ namespace DriftwoodHost
 			return Finish(failure == null, auditProblem, ref output);
 		}
 
+		// The owner's hand on "!stuck": send a named player back to the island spawn. Same
+		// primitive, same refusals (PlayerRescue), audited like every other action on a person.
+		private static bool Rescue(string actor, string args, out string output)
+		{
+			if (args.Length == 0)
+			{
+				output = "say who: rescue <SteamID64 or connected player's name>. Players can do this themselves by typing !stuck in chat.";
+				return false;
+			}
+			string failure = null;
+			string target = args;
+			string rescuedName = null;
+			string runFailure;
+			bool ran = MainThread.Run(() =>
+			{
+				OwnerActions.Found found;
+				failure = OwnerActions.FindConnected(args, out found);
+				if (failure != null) return;
+				target = Describe(found.SteamId, found.Name);
+				string where;
+				failure = PlayerRescue.ToShore(found.Player, out where);
+				if (failure == null) rescuedName = found.Name;
+			}, ActionTimeoutMs, out runFailure);
+			if (!ran) failure = failure ?? runFailure;
+
+			string auditProblem = OwnerAudit.Record(actor, "rescue", target, failure == null,
+				failure ?? "teleported to the island spawn");
+			output = failure != null
+				? "nobody was moved: " + failure
+				: rescuedName + " is being sent back to the island spawn.";
+			return Finish(failure == null, auditProblem, ref output);
+		}
+
+		private static string Top(string args)
+		{
+			if (!CatchLedger.Enabled) return "the catch leaderboard is off on this server (" + CatchHooks.State + ").";
+			int count = 10;
+			if (args.Length > 0 && !int.TryParse(args, NumberStyles.None, CultureInfo.InvariantCulture, out count))
+			{
+				return "usage: top [how many rows]";
+			}
+			List<CatchLedger.Entry> rows = CatchLedger.Top(count);
+			if (rows.Count == 0) return "nobody is on the board yet - it starts with the first bite that gets landed or sold. (" + CatchHooks.State + ")";
+			StringBuilder builder = new StringBuilder();
+			builder.Append("#   name                  catches  earnings    bosses  playtime   best catch").Append(NewLine);
+			for (int i = 0; i < rows.Count; i++)
+			{
+				CatchLedger.Entry row = rows[i];
+				if (i > 0) builder.Append(NewLine);
+				builder.Append((i + 1).ToString(CultureInfo.InvariantCulture).PadRight(4))
+					.Append(Fit(row.Name.Length == 0 ? row.SteamId.ToString(CultureInfo.InvariantCulture) : row.Name, 21)).Append(' ')
+					.Append(row.Catches.ToString(CultureInfo.InvariantCulture).PadLeft(7)).Append("  ")
+					.Append(PlayerCommands.Money(row.Earnings).PadLeft(10)).Append("  ")
+					.Append(row.Bosses.ToString(CultureInfo.InvariantCulture).PadLeft(6)).Append("  ")
+					.Append(PlayerCommands.Duration(row.PlaytimeSeconds).PadRight(10)).Append(' ');
+				if (row.BestCatchName.Length > 0)
+				{
+					builder.Append(row.BestCatchName);
+					if (row.BestCatchWorth > 0) builder.Append(" (").Append(PlayerCommands.Money(row.BestCatchWorth)).Append(')');
+				}
+				else builder.Append('-');
+			}
+			builder.Append(NewLine).Append(NewLine)
+				.Append("Ranked by earnings. Catches are fish landed after this server hooked them; earnings are sales credited to the angler who hooked the item.")
+				.Append(NewLine).Append("File: ").Append(CatchLedger.Path_);
+			return builder.ToString();
+		}
+
+		private const string NewLine = "\n";
+
+		private static string Fit(string value, int width)
+		{
+			if (value.Length > width) return value.Substring(0, width - 1) + "~";
+			return value.PadRight(width);
+		}
+
 		private static string AuditTail(string args)
 		{
 			int count = 20;
@@ -608,7 +696,10 @@ namespace DriftwoodHost
 				"island [next|prev|set <n>]  where the crew is; move everyone together (islands are numbered from 1)",
 				"spawn <item>  drop one of the game's spawnable items next to a connected player",
 				"killboss    end the active boss fight as a kill (trophy and progression included)",
+				"rescue <who>  send a player back to the island spawn (what !stuck does, from your side)",
+				"top [n]     the catch leaderboard: catches, earnings, bosses, playtime per player",
 				"",
+				"Players can type !help, !stuck, !playtime and !top in the game's chat - nothing to install.",
 				"Blocks key on the SteamID64, never the name - names are display text anybody can change.",
 				"Stop and restart live in your hosting panel or supervisor: they flush and back up first."
 			});
@@ -629,6 +720,8 @@ namespace DriftwoodHost
 			builder.Append("blocked   ").Append(Blocklist.Count).Append(" player(s)\n");
 			builder.Append("names     ").Append(readiness.SteamNameResolution.Length == 0 ? "(not sampled yet)" : readiness.SteamNameResolution).Append('\n');
 			builder.Append("discord   ").Append(readiness.DiscordAlertsState.Length == 0 ? "(not sampled yet)" : readiness.DiscordAlertsState).Append('\n');
+			builder.Append("chat cmds ").Append(readiness.PlayerChatState.Length == 0 ? "(not sampled yet)" : readiness.PlayerChatState).Append('\n');
+			builder.Append("top board ").Append(readiness.LeaderboardState.Length == 0 ? "(not sampled yet)" : readiness.LeaderboardState).Append('\n');
 			builder.Append("fps       ").Append(readiness.ActualFrameRate.ToString("0.#"))
 				.Append(readiness.FrameLimiterActive ? " (capped at " + readiness.EffectiveTargetFrameRate + ")" : " (uncapped)");
 			if (config != null && config.PauseWorldWhenEmpty && readiness.WorldPaused) builder.Append("\nworld clock is PAUSED - nobody is connected");

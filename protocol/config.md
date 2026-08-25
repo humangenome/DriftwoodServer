@@ -76,6 +76,20 @@ AlertIsland = true             ; blocked players who tried to come back. A missi
 AlertBlocked = true            ; the default - a missing alert is a missing courtesy, never a
                                ; missing safety, so nothing here fails closed.
 
+[Chat]
+PlayerCommands = true          ; OPTIONAL, default on. Players may type !help, !stuck, !playtime
+                               ; and !top into the game's own chat; the host answers with a
+                               ; [Server] line. Nothing to install. false = the lines are
+                               ; ordinary chat again.
+StuckCooldownSeconds = 60      ; OPTIONAL. Per-player cooldown on the !stuck teleport (the
+                               ; owner's `rescue` console command has none). 0 = no cooldown.
+
+[Leaderboard]
+Enabled = true                 ; OPTIONAL, default on. The per-player catch leaderboard
+                               ; (catches, earnings, bosses, playtime), kept at
+                               ; <SaveRoot>\<World.Name>.leaderboard.tsv beside the world save
+                               ; and published on /status as `leaderboard`.
+
 [World]
 Name = Driftwood               ; a FILENAME: the save is <SaveRoot>\<Name>.txt. Never "local".
 AutoSaveMinutes = 5            ; the game clamps 1-60

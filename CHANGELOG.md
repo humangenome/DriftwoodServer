@@ -2,6 +2,33 @@
 
 All notable changes to DriftwoodServer are recorded here.
 
+## [Unreleased]
+
+### Added
+
+- Player chat commands, typed into the game's own chat by vanilla clients - nothing to
+  install: `!stuck` teleports the player back to the island spawn (the shore by the wreck)
+  through the game's own server-to-owner teleport order, the one an island change already uses
+  on every client; `!playtime` answers with their time on this server, this session and in
+  total; `!top` shows the catch leaderboard's top three and their own rank; `!help` lists them.
+  A command line is never rebroadcast; the answer is a `[Server]` line addressed by name.
+  Every refusal is decided on server state - an island change in progress, a downed player
+  (the game's own respawn is the way back), a boss fight (the game blocks giving up during one
+  for the same reason), the boat's driver (glued to the wheel by the client every frame), a
+  cooldown - and says why. A per-player throttle and a crew-wide cap keep the server from ever
+  amplifying one keyboard into everybody's chat. Every `!stuck` lands in the owner audit log
+  with actor `chat`. `rescue <who>` on the owner console is the same teleport from the owner's
+  side. Off switch: `[Chat] PlayerCommands = false`; cooldown: `[Chat] StuckCooldownSeconds`.
+- The catch leaderboard: per player, fish landed, earnings, bosses finished, best catch and
+  playtime, keyed on the SteamID64 the game replicates and fed only by server-side events in
+  the game's own flow - the bite the server rolled (`CreatureManager.HookItem` ties the new
+  fish to the rod's holder), the server's holder write when it is landed, the sell box's sale,
+  and the server-side hit that finishes a boss. Nothing is a client's claim about itself, and
+  what cannot be attributed (an explosion kill, a fish nobody held) is simply absent. Kept at
+  `<SaveRoot>\<world>.leaderboard.tsv` beside the world save so snapshots, restores and panel
+  backups carry it with the world; `top [n]` on the console prints it; `/status` and the
+  readiness document carry the top ten as `leaderboard` for a panel card. Off switch:
+  `[Leaderboard] Enabled = false`.
 ## [0.1.6] - 2026-08-25
 
 ### Fixed

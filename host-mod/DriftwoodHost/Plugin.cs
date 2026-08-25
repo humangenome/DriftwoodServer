@@ -38,6 +38,8 @@ namespace DriftwoodHost
 		private readonly List<string> _installedGuards = new List<string>();
 		private readonly FrameStats _frames = new FrameStats();
 		private bool _warnedAboutCapBelowTick;
+		private float _lastLedgerFlush;
+		private bool _ledgerFlushWarned;
 
 		private void Awake()
 		{
@@ -212,6 +214,23 @@ namespace DriftwoodHost
 				}
 			}
 
+			// The player-facing layer: chat commands and the catch leaderboard. Both fail-soft
+			// - a missing hook or an unwritable file turns the feature off with one sentence in
+			// the readiness document and changes nothing else. The ledger lives beside the
+			// world save (see CatchLedger for why), so it is initialised now that the save
+			// directory and the world name are both resolved.
+			PlayerChat.Configure(_config.PlayerChatCommands, _config.StuckCooldownSeconds);
+			CatchLedger.LogWarning = message => Log?.LogWarning(message);
+			CatchLedger.LogInfo = message => Log?.LogInfo(message);
+			string ledgerProblem = null;
+			if (_config.Leaderboard)
+			{
+				ledgerProblem = CatchLedger.Initialise(_readiness.SaveDirectory, _config.WorldName);
+				if (ledgerProblem != null) Logger.LogWarning("Catch leaderboard: " + ledgerProblem + ".");
+				else if (CatchLedger.Count > 0) Logger.LogInfo("Catch leaderboard loaded: " + CatchLedger.Count + " player(s) on the board.");
+			}
+			CatchHooks.Configure(_config.Leaderboard, ledgerProblem);
+
 			GhostHost.Suppress = _config.SuppressGhostHost;
 			EmptyWorldPause.Enabled = _config.PauseWorldWhenEmpty;
 			if (EmptyWorldPause.Enabled)
@@ -233,6 +252,8 @@ namespace DriftwoodHost
 			targets.AddRange(MoneyMirror.Targets());
 			targets.AddRange(PlayerPersistence.Targets());
 			targets.Add(SlotGuard.RefusalCounterTarget());
+			if (_config.PlayerChatCommands) targets.AddRange(PlayerChat.Targets());
+			if (_config.Leaderboard && CatchLedger.Enabled) targets.AddRange(CatchHooks.Targets());
 
 			if (!string.IsNullOrWhiteSpace(_config.SimulateMissingPatch))
 			{
@@ -275,6 +296,13 @@ namespace DriftwoodHost
 			_installedGuards.AddRange(report.Applied);
 			BootMarkers.WriteGuards(_installedGuards);
 
+			// Tell the two optional feature groups whether they are in force, so their readiness
+			// sentence says "on" only when every hook they depend on actually applied.
+			PlayerChat.OnPatched(GroupApplied(report, PlayerChat.GroupName, PlayerChat.Targets()));
+			CatchHooks.OnPatched(GroupApplied(report, CatchHooks.GroupName, CatchHooks.Targets()));
+			_readiness.PlayerChatState = PlayerChat.State;
+			_readiness.LeaderboardState = CatchHooks.State;
+
 			if (!report.CanHost)
 			{
 				// FAIL CLOSED. A server that cannot host must not present a port.
@@ -291,6 +319,20 @@ namespace DriftwoodHost
 			StartCoroutine(RunHost());
 			StartCoroutine(WatchStopFile());
 			StartCoroutine(WatchSwallowRate());
+		}
+
+		// True when every target of a feature group is in the applied list. A group that was
+		// stood down, or a member that failed, means the feature is off however healthy the
+		// other members look.
+		private static bool GroupApplied(PatchReport report, string group, IEnumerable<PatchTarget> members)
+		{
+			if (report.StoodDownGroups.Contains(group)) return false;
+			foreach (PatchTarget member in members)
+			{
+				if (member.Group != group) continue;
+				if (!report.Applied.Contains(member.Id)) return false;
+			}
+			return true;
 		}
 
 		// A headless Unity build runs its loop as fast as it can and burns a whole core doing it.
@@ -632,6 +674,27 @@ namespace DriftwoodHost
 						Math.Max(0, IslandManager.TotalIslands - 1));
 				}
 				_readiness.DiscordAlertsState = DiscordAlerts.State;
+				// The leaderboard's playtime column is measured by THIS clock, on this walk: a
+				// present player is credited the seconds since the last sample. Flushed to disk
+				// at most once a minute, and only when something changed.
+				if (CatchLedger.Enabled)
+				{
+					CatchLedger.ObservePlaytime(rosterIds, rosterNames, PlayerDirectory.NowUnix());
+					if (Time.realtimeSinceStartup - _lastLedgerFlush > 60f)
+					{
+						_lastLedgerFlush = Time.realtimeSinceStartup;
+						string ledgerProblem = CatchLedger.FlushIfDirty();
+						if (ledgerProblem != null && !_ledgerFlushWarned)
+						{
+							_ledgerFlushWarned = true;
+							Logger.LogWarning("Catch leaderboard: " + ledgerProblem + ". The board keeps counting in memory; this is logged once.");
+						}
+					}
+					CatchHooks.RefreshState();
+					_readiness.LeaderboardJson = CatchLedger.TopJson(10);
+				}
+				_readiness.LeaderboardState = CatchHooks.State;
+				_readiness.PlayerChatState = PlayerChat.State;
 				_readiness.SteamNameResolution = SteamNameResolver.State;
 				_readiness.BlockedPlayers = Blocklist.Count;
 				List<string> roster = PlayerDirectory.IdentifiedRoster();
@@ -790,6 +853,13 @@ namespace DriftwoodHost
 				{
 					Logger.LogError("Shutdown save failed: " + exception.Message);
 				}
+				// The leaderboard's last minute, before the transport goes and the process ends.
+				try
+				{
+					string ledgerProblem = CatchLedger.FlushIfDirty();
+					if (ledgerProblem != null) Logger.LogWarning("Catch leaderboard: " + ledgerProblem + " on shutdown.");
+				}
+				catch (Exception exception) { Logger.LogWarning("Catch leaderboard shutdown flush failed: " + exception.Message); }
 				EmptyWorldPause.ForceResume();
 				try { CloseTransport(); }
 				catch (Exception exception) { Logger.LogError("Shutdown transport close failed: " + exception.Message); }
