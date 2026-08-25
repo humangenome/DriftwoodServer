@@ -28,6 +28,13 @@ namespace DriftwoodHost
 			// launcher renders the row without a ping, and an invented number would be worse
 			// than an absent one.
 			internal int? PingMs;
+			// Where the player is standing, in world units, sampled on the main thread with the
+			// rest of the row. False when the game gave no transform for this sample - a row
+			// without a position is published without one, never at (0,0,0).
+			internal bool HasPosition;
+			internal float X;
+			internal float Y;
+			internal float Z;
 		}
 
 		private static readonly object Sync = new object();
@@ -51,6 +58,14 @@ namespace DriftwoodHost
 		// connection objects are optional and used only for a ping if one can be read.
 		internal static void Observe(IList<ulong> steamIds, IList<string> names, IList<object> connections)
 		{
+			Observe(steamIds, names, connections, null);
+		}
+
+		// positions: one float[3] {x,y,z} per id, or null where the game had no transform.
+		// Plain floats rather than a Unity type so this file stays free of UnityEngine and the
+		// public /players serializer can never be handed a position it should not publish.
+		internal static void Observe(IList<ulong> steamIds, IList<string> names, IList<object> connections, IList<float[]> positions)
+		{
 			long now = NowUnix();
 			List<Row> rows = new List<Row>();
 			lock (Sync)
@@ -66,13 +81,22 @@ namespace DriftwoodHost
 						since = now;
 						FirstSeenUnix[id] = since;
 					}
-					rows.Add(new Row
+					Row row = new Row
 					{
 						SteamId = id,
 						Name = i < names.Count ? (names[i] ?? string.Empty) : string.Empty,
 						ConnectedSeconds = Math.Max(0, now - since),
 						PingMs = connections != null && i < connections.Count ? ReadPing(connections[i]) : null
-					});
+					};
+					float[] position = positions != null && i < positions.Count ? positions[i] : null;
+					if (position != null && position.Length >= 3)
+					{
+						row.HasPosition = true;
+						row.X = position[0];
+						row.Y = position[1];
+						row.Z = position[2];
+					}
+					rows.Add(row);
 				}
 
 				// Forget anybody who left, so a returning player's timer restarts instead of

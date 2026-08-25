@@ -70,6 +70,11 @@ WebhookUrl = <url>             ; OPTIONAL. Joins/leaves, boss kills, island move
                                ; discord.com / discordapp.com host, an /api/webhooks/ path) - the
                                ; value can be customer-typed, and anything looser is an outbound
                                ; request-forgery primitive. Read at boot; changes take a restart.
+AlertJoinLeave = true          ; OPTIONAL, each defaults to true. Which alerts the webhook
+AlertBoss = true               ; receives: joins and leaves, boss kills, island moves, and
+AlertIsland = true             ; blocked players who tried to come back. A missing flag is
+AlertBlocked = true            ; the default - a missing alert is a missing courtesy, never a
+                               ; missing safety, so nothing here fails closed.
 
 [World]
 Name = Driftwood               ; a FILENAME: the save is <SaveRoot>\<Name>.txt. Never "local".

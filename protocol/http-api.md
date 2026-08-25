@@ -94,6 +94,31 @@ Offline — so that field is never blank. `password_protected` is always `false`
 join password and `HostConfig.Validate()` refuses to start when one is configured, so publishing
 `false` explicitly keeps the launcher's pre-flight prompt off rather than leaving it on "unknown".
 
+### The world block and player positions (0.1.3)
+
+`/status` also carries, on the same loopback-or-signed tier as the roster ids:
+
+```json
+{ "island": 2, "islandTotal": 5, "islandUnlocked": 3, "islandChanging": false,
+  "wallet": 1234, "islandCentre": [-200.0, 598.7], "islandRadius": 55.0,
+  "uptimeSeconds": 4210.5,
+  "positions": [ { "id": "7656119...", "name": "Steve", "connected_seconds": 412,
+                   "x": -196.9, "y": -1.0, "z": 612.0 } ] }
+```
+
+- `island` is 1-based, the way players count islands; `islandTotal` is the number a crew can
+  stand on; `islandUnlocked` is how far the save has progressed. `0` means unknown (the world
+  is not running). `islandChanging` is true while an island swap is loading.
+- `wallet` is the crew's ONE shared wallet; `-1` means unknown.
+- `islandCentre` is the current island's authored centre `[x, z]` and `islandRadius` its
+  authored size, so a plan-view picture of the island can be registered to `positions`.
+  `null` / `0` when no island is loaded.
+- `positions` is one entry per connected player. `x`/`y`/`z` are **absent**, not zero, for a
+  row the sampler could not place, so a consumer draws nothing rather than a dot at the
+  origin. **Never on the public routes** - where a person is standing is the same class of
+  fact as who they are.
+- `uptimeSeconds` is time since this host process started.
+
 ## `GET /api/v1/players`
 
 ```json
