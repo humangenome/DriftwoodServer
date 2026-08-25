@@ -277,6 +277,26 @@ public class HostConfigTests : IDisposable
         }
     }
 
+    [Fact]
+    public void TheDiscordAlertSwitchesReadThePanelsKeysAndDefaultOn()
+    {
+        // The panel writes [Discord] AlertJoinLeave etc. A key-name disagreement here has no
+        // symptom: every alert stays on its default and both halves look healthy - the exact
+        // failure HostConfig is linked into this test project to catch.
+        HostConfig config = Load(Minimal + "\n[Discord]\nAlertJoinLeave = false\nAlertIsland = false\n");
+        Assert.False(config.DiscordAlertJoinLeave);
+        Assert.False(config.DiscordAlertIsland);
+        // The unwritten switches stay on: a customer who only sets the URL gets everything.
+        Assert.True(config.DiscordAlertBoss);
+        Assert.True(config.DiscordAlertBlocked);
+        Assert.Empty(config.UnrecognisedKeys);
+
+        // The bare-key spellings are the same switches, and garbage is the default, not off.
+        HostConfig bare = Load(Minimal + "DiscordAlertBoss = 0\nDiscordAlertBlocked = maybe\n");
+        Assert.False(bare.DiscordAlertBoss);
+        Assert.True(bare.DiscordAlertBlocked);
+    }
+
     public void Dispose()
     {
         try { File.Delete(_path); } catch { }
