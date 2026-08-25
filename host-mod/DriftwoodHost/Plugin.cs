@@ -231,6 +231,7 @@ namespace DriftwoodHost
 			targets.AddRange(GhostHost.Targets());
 			targets.AddRange(SpawnIdentity.Targets());
 			targets.AddRange(MoneyMirror.Targets());
+			targets.AddRange(PlayerPersistence.Targets());
 			targets.Add(SlotGuard.RefusalCounterTarget());
 
 			if (!string.IsNullOrWhiteSpace(_config.SimulateMissingPatch))
