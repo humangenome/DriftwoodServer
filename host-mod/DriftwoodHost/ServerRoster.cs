@@ -74,7 +74,9 @@ namespace DriftwoodHost
 			return list;
 		}
 
-		private static Player OwnedPlayer(NetworkConnection connection)
+		// Internal because identity claims need the same walk: "does this connection
+		// already have a spawned player, and who is it".
+		internal static Player OwnedPlayer(NetworkConnection connection)
 		{
 			if (connection.Objects == null) return null;
 			foreach (NetworkObject owned in connection.Objects)

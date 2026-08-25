@@ -618,6 +618,10 @@ namespace DriftwoodHost
 				// already knows who is connected.
 				SteamNameResolver.Request(rosterIds);
 				OwnerActions.EnforceBlocklist();
+				// Hygiene, not correctness: a claim outliving its connection is already
+				// inert (IdentityClaims binds to the connection object), this just keeps
+				// the table from carrying dead entries.
+				IdentityClaims.Prune();
 				// Discord join/leave and island-move alerts ride the same walk: a set diff and a
 				// byte compare on the main thread, with the HTTP on the alert pipe's own thread.
 				DiscordAlerts.ObserveRoster(rosterIds, rosterNames, _config.MaxPlayers);

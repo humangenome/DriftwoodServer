@@ -229,6 +229,12 @@ namespace DriftwoodHost
 			new RouteSpec { Method = "GET",  Pattern = "/api/v1/health",   Tier = AuthTier.Public },
 			new RouteSpec { Method = "GET",  Pattern = "/api/v1/players",  Tier = AuthTier.Public },
 			new RouteSpec { Method = "GET",  Pattern = "/api/v1/manifest", Tier = AuthTier.Public },
+			// A DriftwoodConnect client attaching its own real SteamID64 to its own
+			// connection. Public BY NECESSITY - the claimant has no credential yet -
+			// and safe to be: nothing in the response varies with the claim's fate,
+			// and IdentityClaims verifies the claim against the connection table and
+			// the socket's own peer address before anything believes it.
+			new RouteSpec { Method = "POST", Pattern = "/api/v1/identity", Tier = AuthTier.Public },
 			new RouteSpec { Method = "GET",  Pattern = "/api/v1/status",   Tier = AuthTier.LoopbackOrSigned },
 			new RouteSpec { Method = "POST", Pattern = "/api/v1/save",     Tier = AuthTier.LoopbackOrSigned },
 			new RouteSpec { Method = "POST", Pattern = "/api/v1/console",  Tier = AuthTier.Signed },
@@ -253,6 +259,9 @@ namespace DriftwoodHost
 			internal string BodyFile;
 			internal string BodySha = string.Empty;
 			internal bool IsLoopback;
+			// The peer's IP as the socket saw it - never a header, headers are claims.
+			// Identity claims verify themselves against this.
+			internal string RemoteAddress = string.Empty;
 
 			internal string Header(string name)
 			{
@@ -269,10 +278,12 @@ namespace DriftwoodHost
 			NetworkStream stream = client.GetStream();
 
 			bool loopback = false;
+			string remoteAddress = string.Empty;
 			try
 			{
 				IPEndPoint endpoint = client.Client.RemoteEndPoint as IPEndPoint;
 				loopback = endpoint != null && IPAddress.IsLoopback(endpoint.Address);
+				if (endpoint != null) remoteAddress = endpoint.Address.ToString();
 			}
 			catch { }
 
@@ -280,6 +291,7 @@ namespace DriftwoodHost
 			try
 			{
 				request = ReadRequest(stream, loopback);
+				if (request != null) request.RemoteAddress = remoteAddress;
 			}
 			catch (Exception exception)
 			{
@@ -525,6 +537,7 @@ namespace DriftwoodHost
 				case "/api/v1/health": Health(stream); return;
 				case "/api/v1/players": PublicPlayers(stream); return;
 				case "/api/v1/manifest": Manifest(stream); return;
+				case "/api/v1/identity": IdentityClaim(stream, request); return;
 				case "/api/v1/status": Write(stream, 200, "application/json", StatusJson()); return;
 
 				case "/api/v1/save":
@@ -707,6 +720,85 @@ namespace DriftwoodHost
 				.Add("count", rows.Count)
 				.AddRaw("players", items.ToString())
 				.Close());
+		}
+
+		// PUBLIC POST, and the one route where the caller ASSERTS something instead of asking.
+		// A DriftwoodConnect client posts its own real SteamID64 and FishNet client id the
+		// moment it connects, so the spawn that follows keys the player's save record on the
+		// person rather than on a connection slot. Everything in the body is hostile input:
+		//
+		//   - fields are decimal STRINGS (a SteamID64 does not survive every JSON number
+		//     path) and parsed strictly off-thread before any main-thread work is spent;
+		//   - the live checks (the connection exists, is remote, plays from the same address
+		//     this socket is talking to, and the id collides with nobody aboard) run on the
+		//     main thread inside IdentityClaims.Submit;
+		//   - the answer is the same 200 {"ok":true} whether the claim was accepted, refused
+		//     or rate-dropped. The claimant does not need the answer (the synthetic fallback
+		//     keeps them playable either way) and a probe must not learn who is aboard by
+		//     watching this route's responses.
+		private void IdentityClaim(NetworkStream stream, Request request)
+		{
+			int clientId;
+			ulong steamId;
+			string name = IdentityClaimRules.SanitizeName(JsonRead.String(request.Body, "name"));
+			if (!IdentityClaimRules.TryParseClientId(JsonRead.String(request.Body, "clientId"), out clientId) ||
+				!IdentityClaimRules.TryParseSteamId(JsonRead.String(request.Body, "steamId"), out steamId) ||
+				!IdentityClaimRules.IsClaimableSteamId(steamId))
+			{
+				Write(stream, 400, "application/json",
+					Error("a claim carries clientId and steamId as decimal strings"));
+				return;
+			}
+
+			// The route is public and Submit is a main-thread hop; the gate keeps a flood
+			// from buying frame time with well-formed junk. Dropped claims are answered
+			// exactly like every other outcome - the client's retry cadence covers a
+			// legitimate claim that lands in a burst.
+			if (ClaimGateAdmits())
+			{
+				string remote = request.RemoteAddress;
+				string sanitized = name;
+				bool accepted = false;
+				string refusal = null;
+				string failure;
+				bool ran = MainThread.Run(() =>
+				{
+					string reason;
+					accepted = IdentityClaims.Submit(clientId, steamId, sanitized, remote, out reason);
+					refusal = reason;
+				}, 5000, out failure);
+				if (ran && !accepted && refusal != null && _claimRefusalsLogged < 10)
+				{
+					_claimRefusalsLogged++;
+					Plugin.Log?.LogInfo("Identity claim for connection " + clientId + " refused: " + refusal + "." +
+						(_claimRefusalsLogged == 10 ? " Further refusals will not be logged." : ""));
+				}
+				else if (!ran)
+				{
+					Plugin.Log?.LogDebug("Identity claim could not run: " + failure);
+				}
+			}
+
+			Write(stream, 200, "application/json", Json.Object().Add("ok", true).Close());
+		}
+
+		private static readonly object ClaimGateSync = new object();
+		private static long _claimWindowStart;
+		private static int _claimsInWindow;
+		private int _claimRefusalsLogged;
+
+		private static bool ClaimGateAdmits()
+		{
+			lock (ClaimGateSync)
+			{
+				long now = DateTime.UtcNow.Ticks;
+				if (now - _claimWindowStart > TimeSpan.TicksPerSecond)
+				{
+					_claimWindowStart = now;
+					_claimsInWindow = 0;
+				}
+				return ++_claimsInWindow <= 8;
+			}
 		}
 
 		// PUBLIC. A player needs to know what a server runs before they hold any credential for
