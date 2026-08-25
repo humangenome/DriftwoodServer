@@ -76,8 +76,10 @@ namespace DriftwoodHost
 			List<Found> list = new List<Found>();
 			try
 			{
-				if (PlayerManager.Players == null) return list;
-				foreach (Player player in PlayerManager.Players)
+				// ServerRoster, not PlayerManager - the game's list reads empty on a
+				// headless host with players aboard, which left kick, block and the
+				// sweep blind to every remote player. See ServerRoster.cs.
+				foreach (Player player in ServerRoster.Connected())
 				{
 					if (player == null) continue;
 					ulong steamId;

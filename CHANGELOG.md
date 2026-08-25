@@ -2,6 +2,22 @@
 
 All notable changes to DriftwoodServer are recorded here.
 
+## [0.1.4] - 2026-08-25
+
+### Fixed
+
+- The roster, the map positions, kick, block, the blocklist sweep and the Discord
+  join/leave alerts now actually see remote players. The game registers players into
+  `PlayerManager` from a client-context callback (`Player.OnStartClient`) that a
+  headless host never runs for a remote player - the ghost client deliberately never
+  enters the world - so every identity feature was reading a list that stays empty on
+  exactly the machine this product ships to. Proven live on the canary: a player
+  standing in the world, transport count 1, roster empty. The host now reads the
+  server's own connection table (`ServerManager.Clients`), where the game itself puts
+  every owned player object with its SteamID64 set server-side before ownership is
+  granted. `PlayerManager` stays as a merge source in case a future game build moves
+  the ownership shape.
+
 ## [0.1.3] - 2026-08-25
 
 ### Added

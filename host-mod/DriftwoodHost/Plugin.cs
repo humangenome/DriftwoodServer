@@ -24,7 +24,7 @@ namespace DriftwoodHost
 	public class Plugin : BaseUnityPlugin
 	{
 		public const string Guid = "com.humangenome.driftwood.host";
-		public const string Version = "0.1.3";
+		public const string Version = "0.1.4";
 
 		internal static ManualLogSource Log;
 
@@ -567,9 +567,12 @@ namespace DriftwoodHost
 				List<string> rosterNames = new List<string>();
 				List<object> rosterConnections = new List<object>();
 				List<float[]> rosterPositions = new List<float[]>();
-				if (PlayerManager.Players != null)
 				{
-					foreach (Player player in PlayerManager.Players)
+					// ServerRoster, not PlayerManager. The game's list fills from a
+					// client-context callback this headless process never runs for a
+					// remote player, so it reads empty with people aboard - see
+					// ServerRoster.cs for the proof and the mechanism.
+					foreach (Player player in ServerRoster.Connected())
 					{
 						if (player == null) continue;
 						ulong steamId = player.SteamID;
