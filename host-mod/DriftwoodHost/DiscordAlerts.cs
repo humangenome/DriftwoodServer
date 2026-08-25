@@ -63,6 +63,11 @@ namespace DriftwoodHost
 		private static int _backoffSeconds = BackoffFloorSeconds;
 		private static int _sent;
 		private static bool _failureWarned;
+		// Per-alert switches from [Discord] Alert*. Default on; read once at Initialise.
+		private static bool _alertJoinLeave = true;
+		private static bool _alertBoss = true;
+		private static bool _alertIsland = true;
+		private static bool _alertBlocked = true;
 
 		// One plain sentence for the readiness document and the console's `status`, so "why are
 		// there no alerts" is answerable from the panel instead of from a log dive.
@@ -91,12 +96,18 @@ namespace DriftwoodHost
 				}
 				_webhookUrl = url;
 				if (!string.IsNullOrEmpty(config?.ServerName)) _username = config.ServerName;
+				if (config != null)
+				{
+					_alertJoinLeave = config.DiscordAlertJoinLeave;
+					_alertBoss = config.DiscordAlertBoss;
+					_alertIsland = config.DiscordAlertIsland;
+					_alertBlocked = config.DiscordAlertBlocked;
+				}
 				_running = true;
 				_worker = new Thread(WorkLoop) { IsBackground = true, Name = "Driftwood.DiscordAlerts" };
 				_worker.Start();
 				_state = "ok (0 sent this run)";
-				LogInfo?.Invoke("Discord alerts are ON (webhook from " + source +
-					"): joins, leaves, boss kills, island moves and blocked-join attempts will be posted.");
+				LogInfo?.Invoke("Discord alerts are ON (webhook from " + source + "): " + EnabledSentence() + ".");
 			}
 			catch (Exception exception)
 			{
@@ -126,6 +137,15 @@ namespace DriftwoodHost
 		internal static void ObserveRoster(IList<ulong> ids, IList<string> names, int slots)
 		{
 			if (!_running || ids == null) return;
+			if (!_alertJoinLeave)
+			{
+				// Still track the roster so switching the alert on later starts from the
+				// present, not from a flood of "joined" for everyone already here.
+				Dictionary<ulong, string> seen = new Dictionary<ulong, string>();
+				for (int i = 0; i < ids.Count; i++) { if (ids[i] != 0UL) seen[ids[i]] = string.Empty; }
+				_lastRoster = seen;
+				return;
+			}
 			Dictionary<ulong, string> current = new Dictionary<ulong, string>();
 			for (int i = 0; i < ids.Count; i++)
 			{
@@ -168,6 +188,7 @@ namespace DriftwoodHost
 		internal static void ObserveIsland(int islandOneBased, int totalPlayable)
 		{
 			if (!_running || islandOneBased < 1) return;
+			if (!_alertIsland) { _lastIslandOneBased = islandOneBased; return; }
 			if (_lastIslandOneBased < 1)
 			{
 				_lastIslandOneBased = islandOneBased;
@@ -181,14 +202,14 @@ namespace DriftwoodHost
 
 		internal static void BossDefeated(string bossName)
 		{
-			if (!_running) return;
+			if (!_running || !_alertBoss) return;
 			string name = string.IsNullOrEmpty(bossName) ? "The boss" : bossName;
 			Enqueue(name + " was defeated.");
 		}
 
 		internal static void BlockedPlayerRejected(ulong steamId, string name)
 		{
-			if (!_running) return;
+			if (!_running || !_alertBlocked) return;
 			string label = string.IsNullOrEmpty(name)
 				? steamId.ToString(CultureInfo.InvariantCulture)
 				: name + " (" + steamId.ToString(CultureInfo.InvariantCulture) + ")";
@@ -414,10 +435,28 @@ namespace DriftwoodHost
 			return string.Empty;
 		}
 
+		// Plain words for the log and the console: which alerts this server will post.
+		internal static string EnabledSentence()
+		{
+			List<string> on = new List<string>();
+			if (_alertJoinLeave) on.Add("joins and leaves");
+			if (_alertBoss) on.Add("boss kills");
+			if (_alertIsland) on.Add("island moves");
+			if (_alertBlocked) on.Add("blocked-join attempts");
+			return on.Count == 0 ? "every alert is switched off" : string.Join(", ", on.ToArray()) + " will be posted";
+		}
+
+		// Test seam: which alerts fire, without a config file.
+		internal static void ConfigureForTests(bool joinLeave, bool boss, bool island, bool blocked)
+		{
+			_alertJoinLeave = joinLeave; _alertBoss = boss; _alertIsland = island; _alertBlocked = blocked;
+		}
+
 		// Test seam: the diff state is static, and two tests observing rosters must not see
 		// each other's baseline.
 		internal static void ResetForTests()
 		{
+			_alertJoinLeave = _alertBoss = _alertIsland = _alertBlocked = true;
 			_lastRoster = null;
 			_lastIslandOneBased = -1;
 			lock (Sync) Pending.Clear();

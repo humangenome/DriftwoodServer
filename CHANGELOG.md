@@ -2,6 +2,24 @@
 
 All notable changes to DriftwoodServer are recorded here.
 
+## [Unreleased]
+
+### Added
+
+- `/api/v1/status` carries the world block the hosting panel's map and console read:
+  the crew's current island (1-based), how many islands there are and how many the save
+  has unlocked, whether an island change is in flight, the crew's one shared wallet, the
+  current island's authored centre and radius, uptime, and one position entry per connected
+  player (`x`/`y`/`z`, absent rather than zero when the sampler could not place a row).
+  Positions ride the same loopback-or-signed tier as the roster ids and never the public
+  routes: where somebody is standing is the same class of fact as who they are. Everything
+  is sampled on the main thread beside the roster; a game build that moves a manager costs
+  the world block, never the roster sample.
+- `[Discord] AlertJoinLeave` / `AlertBoss` / `AlertIsland` / `AlertBlocked`, all default on,
+  so the hosting panel can let an owner pick which alerts their channel receives. Turning
+  joins and leaves off still tracks the roster, so switching them back on later starts from
+  the present rather than a flood of "joined" for everyone already aboard.
+
 ## [0.1.2] - 2026-08-24
 
 ### Added

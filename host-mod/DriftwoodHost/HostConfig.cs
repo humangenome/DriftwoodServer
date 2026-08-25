@@ -62,6 +62,14 @@ namespace DriftwoodHost
 		// rewrites this config on every start and would erase a hand-added value; the inline
 		// key exists for self-hosters and for the day the panel grows a webhook field.
 		public string DiscordWebhookUrl = string.Empty;
+		// Which alerts the webhook receives. All ON by default, so a customer who only sets
+		// the URL gets everything; a panel field turns each one off. A flag the panel never
+		// writes is simply the default - there is nothing here that fails closed, because a
+		// missing alert is a missing courtesy, not a missing safety.
+		public bool DiscordAlertJoinLeave = true;
+		public bool DiscordAlertBoss = true;
+		public bool DiscordAlertIsland = true;
+		public bool DiscordAlertBlocked = true;
 
 		public string WorldName = "Driftwood";
 		public string SaveRoot = string.Empty;
@@ -153,6 +161,14 @@ namespace DriftwoodHost
 
 			config.DiscordWebhookUrl = config.String(config.DiscordWebhookUrl,
 				"Discord.WebhookUrl", "Discord.DiscordWebhookUrl", "DiscordWebhookUrl");
+			config.DiscordAlertJoinLeave = config.Bool(config.DiscordAlertJoinLeave,
+				"Discord.AlertJoinLeave", "Discord.JoinLeave", "DiscordAlertJoinLeave");
+			config.DiscordAlertBoss = config.Bool(config.DiscordAlertBoss,
+				"Discord.AlertBoss", "Discord.Boss", "DiscordAlertBoss");
+			config.DiscordAlertIsland = config.Bool(config.DiscordAlertIsland,
+				"Discord.AlertIsland", "Discord.Island", "DiscordAlertIsland");
+			config.DiscordAlertBlocked = config.Bool(config.DiscordAlertBlocked,
+				"Discord.AlertBlocked", "Discord.Blocked", "DiscordAlertBlocked");
 
 			config.WorldName = config.String(config.WorldName,
 				"World.Name", "World.WorldName", "Server.WorldName", "WorldName", "world_name", "SaveName");

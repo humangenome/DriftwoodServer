@@ -763,7 +763,49 @@ namespace DriftwoodHost
 				// yet, and is exactly the state that must never be invisible.
 				.Add("pending_restore", SnapshotStore.PendingRestoreId)
 				.AddStrings("roster", _readiness.Roster())
+				// THE WORLD BLOCK AND PLAYER POSITIONS. Same tier as the roster ids - loopback or
+				// signed, never the public routes - because where a person is standing is the
+				// same class of fact as who they are. The panel relays it to the owner's map;
+				// nothing on the open /players route ever receives a coordinate.
+				.Add("island", worldRunning ? _readiness.IslandCurrent : 0)
+				.Add("islandTotal", _readiness.IslandTotal)
+				.Add("islandUnlocked", worldRunning ? _readiness.IslandUnlocked : 0)
+				.Add("islandChanging", worldRunning && _readiness.IslandChanging)
+				.Add("wallet", worldRunning ? _readiness.Wallet : -1L)
+				.AddRaw("islandCentre", (worldRunning && _readiness.IslandCentreKnown)
+					? "[" + _readiness.IslandCentreX.ToString("0.##", CultureInfo.InvariantCulture) + "," + _readiness.IslandCentreZ.ToString("0.##", CultureInfo.InvariantCulture) + "]"
+					: "null")
+				.Add("islandRadius", worldRunning ? _readiness.IslandRadius : 0d)
+				.Add("uptimeSeconds", _readiness.UptimeSeconds)
+				.AddRaw("positions", worldRunning ? PositionsJson() : "[]")
 				.Close();
+		}
+
+		// One entry per connected player: the id (this is the identified tier), the display
+		// name, and x/y/z in world units when the game gave a transform on the last sample.
+		// A row the sampler could not place is published WITHOUT coordinates, so the map
+		// draws nothing for it rather than a dot at the origin.
+		private static string PositionsJson()
+		{
+			List<PlayerDirectory.Row> rows = PlayerDirectory.Snapshot();
+			StringBuilder items = new StringBuilder("[");
+			for (int i = 0; i < rows.Count; i++)
+			{
+				if (i > 0) items.Append(',');
+				Json entry = Json.Object()
+					.Add("id", rows[i].SteamId.ToString(CultureInfo.InvariantCulture))
+					.Add("name", string.IsNullOrEmpty(rows[i].Name) ? DriftwoodIdentity.Placeholder(rows[i].SteamId) : rows[i].Name)
+					.Add("connected_seconds", rows[i].ConnectedSeconds);
+				if (rows[i].HasPosition)
+				{
+					entry.Add("x", Math.Round((double)rows[i].X, 2))
+						.Add("y", Math.Round((double)rows[i].Y, 2))
+						.Add("z", Math.Round((double)rows[i].Z, 2));
+				}
+				items.Append(entry.Close());
+			}
+			items.Append(']');
+			return items.ToString();
 		}
 
 		// ------------------------------------------------------------------

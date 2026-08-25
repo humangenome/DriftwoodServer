@@ -84,6 +84,24 @@ namespace DriftwoodHost
 		// One plain sentence from the Discord alert pipe, same contract as the name resolver's:
 		// "off (...)" / "ok (N sent this run)" / "failing (...)".
 		public string DiscordAlertsState = string.Empty;
+		// THE WORLD BLOCK, for the panel's map and console: where the crew is (1-based, the way
+		// players count islands), how many islands there are and how many the save has
+		// unlocked, whether an island change is in flight, the crew's one shared wallet, and
+		// the current island's authored centre and radius so a plan-view picture can be
+		// registered to player positions. All sampled on the main thread with the roster;
+		// zero / -1 mean UNKNOWN and the panel shows a dash, never a number it invented.
+		public int IslandCurrent;
+		public int IslandTotal;
+		public int IslandUnlocked;
+		public bool IslandChanging;
+		public long Wallet = -1;
+		public bool IslandCentreKnown;
+		public double IslandCentreX;
+		public double IslandCentreZ;
+		public double IslandRadius;
+		// Seconds since this host process started, so a public page can say how long the
+		// server has been up without a panel round trip.
+		public double UptimeSeconds;
 		public bool LoopIdling;
 		public int IdleTransitions;
 		public int WorldResumeCount;
@@ -179,6 +197,11 @@ namespace DriftwoodHost
 					.Add("steamNameResolution", SteamNameResolution)
 					.Add("blockedPlayers", BlockedPlayers)
 					.Add("discordAlerts", DiscordAlertsState)
+					.Add("island", WorldRunning ? IslandCurrent : 0)
+					.Add("islandTotal", IslandTotal)
+					.Add("islandUnlocked", WorldRunning ? IslandUnlocked : 0)
+					.Add("wallet", WorldRunning ? Wallet : -1)
+					.Add("uptimeSeconds", UptimeSeconds)
 					.Add("effectiveBindAddress", EffectiveBindAddress)
 					.Add("effectiveTargetFrameRate", EffectiveTargetFrameRate)
 					.Add("actualFrameRate", ActualFrameRate)

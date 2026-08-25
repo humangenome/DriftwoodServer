@@ -566,6 +566,7 @@ namespace DriftwoodHost
 				List<ulong> rosterIds = new List<ulong>();
 				List<string> rosterNames = new List<string>();
 				List<object> rosterConnections = new List<object>();
+				List<float[]> rosterPositions = new List<float[]>();
 				if (PlayerManager.Players != null)
 				{
 					foreach (Player player in PlayerManager.Players)
@@ -584,9 +585,27 @@ namespace DriftwoodHost
 							?? player.SteamName
 							?? DriftwoodIdentity.Placeholder(steamId));
 						rosterConnections.Add(null);
+						// Where they stand, for the owner's map. The body transform when the game
+						// exposes one, the object's own otherwise; a throw here costs this row its
+						// dot and nothing else.
+						float[] where = null;
+						try
+						{
+							Transform body = null;
+							try { body = player.Transform; } catch { }
+							if (body == null) body = player.transform;
+							if (body != null)
+							{
+								Vector3 at = body.position;
+								if (!float.IsNaN(at.x) && !float.IsNaN(at.y) && !float.IsNaN(at.z)) where = new[] { at.x, at.y, at.z };
+							}
+						}
+						catch { }
+						rosterPositions.Add(where);
 					}
 				}
-				PlayerDirectory.Observe(rosterIds, rosterNames, rosterConnections);
+				PlayerDirectory.Observe(rosterIds, rosterNames, rosterConnections, rosterPositions);
+				SampleWorld();
 				// Hand the connected ids to the name resolver (a set-add under a lock, nothing
 				// slower - the actual HTTP happens on its own thread), and sweep the block list.
 				// Both live in the sampler because it is the one recurring main-thread walk that
@@ -631,6 +650,62 @@ namespace DriftwoodHost
 			catch (Exception exception)
 			{
 				Logger.LogWarning("Readiness sample failed: " + exception.GetType().Name + " " + exception.Message);
+			}
+		}
+
+		// The world block behind the panel's map and console: island, progression, wallet,
+		// the current island's authored centre and radius, uptime. Its own try so a game build
+		// that moves one of these managers costs the world block, never the roster sample.
+		private void SampleWorld()
+		{
+			_readiness.UptimeSeconds = Math.Round((double)Time.realtimeSinceStartup, 1);
+			if (!_readiness.WorldRunning)
+			{
+				_readiness.IslandCurrent = 0;
+				_readiness.IslandUnlocked = 0;
+				_readiness.IslandChanging = false;
+				_readiness.Wallet = -1;
+				_readiness.IslandCentreKnown = false;
+				return;
+			}
+			try
+			{
+				int playable = Math.Max(0, IslandManager.TotalIslands - 1);
+				_readiness.IslandTotal = playable;
+				_readiness.IslandChanging = IslandManager.IsLoading;
+				OnlineIslandManager islands = OnlineIslandManager.Instance;
+				if (islands != null)
+				{
+					_readiness.IslandCurrent = islands._curIsland.Value + 1;
+					_readiness.IslandUnlocked = Math.Min(islands._maxIslandUnlocked.Value + 1, Math.Max(playable, 1));
+				}
+				Island island = Island.CurIsland;
+				if (island != null)
+				{
+					Vector3 centre = Island.IslandPos;
+					_readiness.IslandCentreKnown = true;
+					_readiness.IslandCentreX = Math.Round((double)centre.x, 2);
+					_readiness.IslandCentreZ = Math.Round((double)centre.z, 2);
+					_readiness.IslandRadius = Math.Round((double)Island.IslandSize, 1);
+				}
+				else
+				{
+					_readiness.IslandCentreKnown = false;
+				}
+			}
+			catch (Exception exception)
+			{
+				Logger.LogDebug("Island sample failed: " + exception.Message);
+			}
+			try
+			{
+				MoneyManager money = MoneyManager.Instance;
+				_readiness.Wallet = (money != null && money.IsServerInitialized) ? money._money.Value : -1;
+			}
+			catch (Exception exception)
+			{
+				_readiness.Wallet = -1;
+				Logger.LogDebug("Wallet sample failed: " + exception.Message);
 			}
 		}
 
