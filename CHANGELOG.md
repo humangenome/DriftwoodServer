@@ -2,6 +2,35 @@
 
 All notable changes to DriftwoodServer are recorded here.
 
+## [0.1.6] - 2026-08-25
+
+### Fixed
+
+- **Every purchase refused on a dedicated server.** How to Fish holds the crew's money
+  twice: `MoneyManager._money` is the real balance (a `SyncVar<int>` loaded from the world
+  save and moved by selling, granting and spending), while `MoneyManager.Money` is a plain
+  static mirror written only by CLIENT code - `OnStartClient`, `OnStopClient`, and the
+  `!asServer` half of the SyncVar's change callback. Two things read that static and both
+  of them run on the SERVER: `CanAfford`, which is the gate inside all eight purchase
+  ServerRpcs (`BuyItem`, `BuyBait`, `UnlockPocket`, `BuyAttachment`, `BuyBulletUpgrade`,
+  `BuySharpnessUpgrade`, `BuyBoatMotor`, `BuyBoatRadar`), and `SaveManager.SaveServer`,
+  which persists it into the world file. On a listen server the host is also a client, so
+  the mirror tracks and nobody notices. On a dedicated server it freezes at the figure the
+  world was loaded with - zero on a new world - so the client's own balance is correct, the
+  client sends the purchase, and the server compares it against a stale number and drops it
+  with no message. The player sees money that never goes down and an item that never
+  arrives, on a server where selling visibly works, and the same frozen number is written
+  back over the save so a session's earnings never persist. It fails permissively too: a
+  save holding a large figure approves every purchase under it for ever. The host now keeps
+  the static in step with the SyncVar on the server, which is exactly what the client half
+  of the game does for itself - postfixes on `MoneyManager.OnStartServer`, `AddMoney`,
+  `SellItem` and `RemoveMoney`, and a prefix on `SaveManager.SaveServer` because
+  `OnStopClient` zeroes the mirror on the way down and a shutdown save would otherwise
+  persist that zero over a real balance. The SyncVar is still the only thing that moves
+  money and every purchase is still decided server-side. The five patches are optional and
+  share one group, so a game build that renames any of them stands the mirror down and the
+  server still hosts rather than refusing to host over a shop.
+
 ## [0.1.5] - 2026-08-25
 
 ### Fixed
