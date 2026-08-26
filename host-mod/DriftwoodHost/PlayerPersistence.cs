@@ -37,6 +37,14 @@ namespace DriftwoodHost
 	// miss. The game then serializes the records exactly as it always intended to.
 	// Offline players are untouched: their records ride along in the carried-forward
 	// list, and SavePlayer updates in place by SteamID rather than rebuilding.
+	//
+	// LIVE FINDING (canary, 2026-08-26, game 1.0.6): on this build the server's own
+	// loopback ghost client observes remote player spawns, which runs OnStartClient in
+	// this process and DOES register them in PlayerManager - so the vanilla walk usually
+	// covers connected players and this prefix stays silent (captured == 0, no log
+	// line). It remains armed for the states where that observer path has not run or
+	// has broken - the exact state the 0.1.4-era roster evidence recorded - and the
+	// vanilla-set skip plus the per-id dedupe below make it a no-op when redundant.
 	internal static class PlayerPersistence
 	{
 		internal const string GroupName = "player-persistence";
@@ -83,11 +91,20 @@ namespace DriftwoodHost
 				// game build that starts filling PlayerManager headless cannot make
 				// this save anyone twice.
 				HashSet<Player> vanilla = new HashSet<Player>();
+				HashSet<ulong> savedIds = new HashSet<ulong>();
 				try
 				{
 					foreach (Player known in PlayerManager.Players)
 					{
-						if (known != null) vanilla.Add(known);
+						if (known == null) continue;
+						vanilla.Add(known);
+						// The ids the game's own walk is about to save. Proven live on the
+						// canary (2026-08-26): a client that vanishes without a FIN can leave
+						// its Player OBJECT stranded in PlayerManager while the person rejoins
+						// and reclaims the same id - two objects, one id. Whatever this prefix
+						// captures must never overwrite the record the vanilla walk writes for
+						// a LIVE player with a stale ghost's frozen copy of the same id.
+						try { savedIds.Add(known.SteamID); } catch { }
 					}
 				}
 				catch { }
@@ -104,6 +121,10 @@ namespace DriftwoodHost
 						// the merge source.
 						ulong steamId = player.SteamID;
 						if (steamId == 0UL || steamId == DriftwoodIdentity.HostSteamId) continue;
+						// One record per id per save. The roster walks live connections first,
+						// so when a stale object shares a live player's id, the live one is
+						// the one this pass keeps.
+						if (!savedIds.Add(steamId)) continue;
 						PlayerInventory inventory = player.Inventory;
 						if (inventory == null) continue;
 						// The game's own capture, exactly as a listen server runs it:
