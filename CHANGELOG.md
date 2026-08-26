@@ -2,9 +2,47 @@
 
 All notable changes to DriftwoodServer are recorded here.
 
-## [Unreleased]
+## [0.1.7] - 2026-08-26
+
+### Fixed
+
+- **No connected player's progress ever reached the world save.** `SaveManager.SaveServer`
+  opens by walking `PlayerManager.Players` and calling each player's `SaveInventory()` -
+  the call that folds their inventory, held item, health, fullness, baits, pockets and
+  tutorial state into the save before the file is written. `PlayerManager` fills from
+  `Player.OnStartClient`, a CLIENT-context callback that never runs on a headless host for
+  a remote player, so on every dedicated server that walk was a no-op: every autosave,
+  every panel save and every shutdown save wrote the world WITHOUT the people in it. It
+  survived unnoticed because the game separately saves a departing player at disconnect,
+  so a clean leave followed by a later autosave did persist - what was lost, every time,
+  was everything a connected player had done since they last disconnected (the panel's own
+  restart saves first, and that save could not see them), and everyone aboard on a crash.
+  The host now prefixes `SaveServer` with the same walk over the server's own connection
+  table the roster already uses, running the game's own `SaveInventory` for every connected
+  player the vanilla walk misses; the game then serializes the records exactly as it always
+  intended to. Offline players are untouched - the save carries the player list forward by
+  reference and `SavePlayer` updates records in place by SteamID - and a failure captures
+  as much of the crew as it can, never costing the save itself. The patch is optional: a
+  game build that renames `SaveServer` stands it down (disconnect-only persistence, named
+  in `featuresStoodDown`) rather than refusing to host.
 
 ### Added
+
+- **A modded client can claim its real SteamID64** - `POST /api/v1/identity`, public by
+  necessity because the claimant holds no credential yet, and bounded by what a claim may
+  say: only an issuable individual-account id (never the host's reserved identity, never
+  the synthetic per-connection range), only from the IP address the claimed connection
+  plays from (read off the socket, never a header; unparseable fails closed), only onto a
+  live remote connection, colliding with nobody aboard, and the first valid claim wins for
+  the connection's life so it can never be swapped under a spawned character. The spawn
+  that follows keys the player's save record on the person instead of on a connection slot
+  - game 1.0.6 stopped sending the id, so an unmodded player's character belongs to
+  whatever slot they land on and a rejoin can land somebody else's body. A client that
+  claims nothing keeps the synthetic fallback and plays exactly as before; the answer is
+  the same `{"ok":true}` whatever the claim's fate, so a probe learns nothing about who is
+  aboard. What a claim deliberately does not prove is Steam account ownership - the server
+  runs without Steam, so this restores the game's own 1.0.4/1.0.5 trust model (the client
+  states its id), not more.
 
 - Player chat commands, typed into the game's own chat by vanilla clients - nothing to
   install: `!stuck` teleports the player back to the island spawn (the shore by the wreck)
