@@ -1,0 +1,177 @@
+using DriftwoodHost;
+using Xunit;
+
+namespace DriftwoodServer.Tests;
+
+// Every field these rules judge arrives on a PUBLIC unauthenticated route, from a client
+// asserting who it is. The rules are the entire difference between "a player's save follows
+// them" and "anyone on the internet can wear the host's identity", so each refusal direction
+// is pinned here, not just the happy path.
+public class IdentityClaimRulesTests
+{
+    // ------------------------------------------------------------------
+    // The id gate: only an issuable individual-account SteamID64 is claimable.
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void TheFirstIssuedSteamIdIsClaimable()
+    {
+        Assert.True(IdentityClaimRules.IsClaimableSteamId(IdentityClaimRules.FirstRealSteamId));
+    }
+
+    [Fact]
+    public void TheTopOfTheIndividualSpaceIsClaimable()
+    {
+        Assert.True(IdentityClaimRules.IsClaimableSteamId(IdentityClaimRules.LastRealSteamId));
+    }
+
+    [Fact]
+    public void TheHostPlaceholderIsNeverClaimable()
+    {
+        // 76561190000000001 - the host's own reserved identity. A claim carrying it is an
+        // attempt to BE the server.
+        Assert.False(IdentityClaimRules.IsClaimableSteamId(76561190000000001UL));
+    }
+
+    [Fact]
+    public void TheSyntheticSpawnRangeIsNeverClaimable()
+    {
+        // 76561190000100000 + connectionId - the per-connection fallback identities. A claim
+        // inside the range would collide with an unmodded player's save record.
+        Assert.False(IdentityClaimRules.IsClaimableSteamId(76561190000100003UL));
+    }
+
+    [Fact]
+    public void ZeroAndAboveTheIssuableSpaceAreRefused()
+    {
+        Assert.False(IdentityClaimRules.IsClaimableSteamId(0UL));
+        Assert.False(IdentityClaimRules.IsClaimableSteamId(IdentityClaimRules.LastRealSteamId + 1UL));
+        Assert.False(IdentityClaimRules.IsClaimableSteamId(ulong.MaxValue));
+    }
+
+    // ------------------------------------------------------------------
+    // The parsers: strict decimal strings, because a SteamID64 does not survive every
+    // JSON number path and a lenient parser is a second grammar to attack.
+    // ------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("76561197960287930", 76561197960287930UL)]
+    [InlineData("76561197960265729", 76561197960265729UL)]
+    public void AWellFormedSteamIdParses(string text, ulong expected)
+    {
+        Assert.True(IdentityClaimRules.TryParseSteamId(text, out var parsed));
+        Assert.Equal(expected, parsed);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" 76561197960287930")]
+    [InlineData("76561197960287930 ")]
+    [InlineData("+76561197960287930")]
+    [InlineData("-1")]
+    [InlineData("0x11000010000000")]
+    [InlineData("7.6561197960287e16")]
+    [InlineData("999999999999999999999999")]
+    public void AMalformedSteamIdIsRefused(string? text)
+    {
+        Assert.False(IdentityClaimRules.TryParseSteamId(text, out _));
+    }
+
+    [Theory]
+    [InlineData("0", 0)]
+    [InlineData("3", 3)]
+    [InlineData("214748364", 214748364)]
+    public void AWellFormedClientIdParses(string text, int expected)
+    {
+        Assert.True(IdentityClaimRules.TryParseClientId(text, out var parsed));
+        Assert.Equal(expected, parsed);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("-1")]
+    [InlineData("+1")]
+    [InlineData("1e3")]
+    [InlineData("99999999999")]
+    public void AMalformedClientIdIsRefused(string? text)
+    {
+        Assert.False(IdentityClaimRules.TryParseClientId(text, out _));
+    }
+
+    // ------------------------------------------------------------------
+    // The name sanitiser: display-only hostile input.
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void AnOrdinaryNameSurvivesUntouched()
+    {
+        Assert.Equal("Captain Herring", IdentityClaimRules.SanitizeName("Captain Herring"));
+    }
+
+    [Fact]
+    public void ControlCharactersAreStrippedNotEncoded()
+    {
+        // A newline in a name must never reach a log line or a terminal.
+        Assert.Equal("ab", IdentityClaimRules.SanitizeName("a\r\n\tb\0"));
+    }
+
+    [Fact]
+    public void AnOverlongNameIsCappedAtSixtyFourCharacters()
+    {
+        var sanitized = IdentityClaimRules.SanitizeName(new string('x', 500));
+        Assert.NotNull(sanitized);
+        Assert.Equal(64, sanitized!.Length);
+    }
+
+    [Fact]
+    public void NothingUsableBecomesNullNotAPlaceholder()
+    {
+        Assert.Null(IdentityClaimRules.SanitizeName(null));
+        Assert.Null(IdentityClaimRules.SanitizeName(""));
+        Assert.Null(IdentityClaimRules.SanitizeName("   "));
+        Assert.Null(IdentityClaimRules.SanitizeName("\u0001\u0002"));
+    }
+
+    // ------------------------------------------------------------------
+    // The address binding: the claim must arrive from the address the claimed
+    // connection plays from, ports ignored, unparseable fails CLOSED.
+    // ------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("203.0.113.9", "203.0.113.9")]
+    [InlineData("203.0.113.9:22043", "203.0.113.9")]
+    [InlineData("203.0.113.9:22043", "203.0.113.9:61022")]
+    [InlineData("::ffff:203.0.113.9", "203.0.113.9")]
+    [InlineData("203.0.113.9", "::ffff:203.0.113.9")]
+    [InlineData("[2001:db8::1]:22043", "2001:db8::1")]
+    [InlineData("2001:db8::1", "2001:db8::1")]
+    public void TheSameHostMatchesAcrossEveryFormTheStacksProduce(string transport, string http)
+    {
+        Assert.True(IdentityClaimRules.AddressesMatch(transport, http));
+    }
+
+    [Theory]
+    [InlineData("203.0.113.9", "203.0.113.10")]
+    [InlineData("203.0.113.9:22043", "198.51.100.9:22043")]
+    [InlineData("2001:db8::1", "2001:db8::2")]
+    public void DifferentHostsNeverMatch(string transport, string http)
+    {
+        Assert.False(IdentityClaimRules.AddressesMatch(transport, http));
+    }
+
+    [Theory]
+    [InlineData(null, "203.0.113.9")]
+    [InlineData("", "203.0.113.9")]
+    [InlineData("203.0.113.9", null)]
+    [InlineData("203.0.113.9", "")]
+    [InlineData("not-an-address", "not-an-address")]
+    [InlineData("localhost", "localhost")]
+    public void AnUnparseableAddressFailsClosed(string? transport, string? http)
+    {
+        // Identical junk still refuses: a transport that cannot state an address degrades
+        // to the synthetic fallback, never to an unverified claim.
+        Assert.False(IdentityClaimRules.AddressesMatch(transport, http));
+    }
+}

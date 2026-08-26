@@ -37,6 +37,12 @@
          here. Json.cs rides along because the payload builder uses it. -->
     <Compile Include="../../host-mod/DriftwoodHost/Json.cs" Link="Linked/Json.cs" />
     <Compile Include="../../host-mod/DriftwoodHost/DiscordAlerts.cs" Link="Linked/DiscordAlerts.cs" />
+    <!-- The pure half of identity claims: the SteamID64 range gate, the strict string
+         parsers and the address binding. Every field it judges arrives on a PUBLIC,
+         unauthenticated route, which is exactly why the judging is kept dependency-free
+         and proven here. The connection-table half stays in IdentityClaims.cs and is
+         proven on the canary instead. -->
+    <Compile Include="../../host-mod/DriftwoodHost/IdentityClaimRules.cs" Link="Linked/IdentityClaimRules.cs" />
   </ItemGroup>
   <PropertyGroup>
     <NoWarn>$(NoWarn);CS8618;CS8600;CS8601;CS8602;CS8603;CS8604;CS8625</NoWarn>

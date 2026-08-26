@@ -95,8 +95,14 @@ namespace DriftwoodHost
 		}
 
 		// What SteamUser.GetSteamID should answer right now. The host placeholder, unless the
-		// game is mid-way through spawning a REMOTE player - then that connection's own
-		// synthetic id, so the crew stays distinguishable.
+		// game is mid-way through spawning a REMOTE player - then that player's REAL
+		// SteamID64 when their client claimed one (DriftwoodConnect posts it, and
+		// IdentityClaims verified it against this very connection), and that connection's
+		// own synthetic id otherwise, so the crew stays distinguishable either way.
+		//
+		// The claim is what makes a per-player save follow the PERSON: the synthetic id is
+		// a connection-slot number, so without a claim a rejoin can land a different slot
+		// and with it a different saved character. A real id is the same on every join.
 		internal static ulong CurrentIdentity()
 		{
 			try
@@ -104,6 +110,10 @@ namespace DriftwoodHost
 				NetworkConnection connection = _spawning;
 				if (connection != null && !connection.IsLocalClient)
 				{
+					ulong claimed = 0UL;
+					try { claimed = IdentityClaims.IdentityFor(connection); }
+					catch { }
+					if (claimed != 0UL) return claimed;
 					int clientId = connection.ClientId;
 					if (clientId >= 0) return SyntheticBase + (ulong)clientId;
 				}

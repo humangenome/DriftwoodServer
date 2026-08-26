@@ -25,8 +25,9 @@ namespace DriftwoodHost
 		// The first id Valve ever issued. Everything below it is one of OURS - the host
 		// placeholder or a per-connection spawn identity (see SpawnIdentity) - so the Steam
 		// Web API must never be asked about it and no ban/roster logic may treat it as a
-		// real account.
-		public const ulong FirstRealSteamId = 76561197960265729UL;
+		// real account. The value is owned by IdentityClaimRules (the dependency-free file
+		// the test suite links), aliased here so the two can never drift.
+		public const ulong FirstRealSteamId = IdentityClaimRules.FirstRealSteamId;
 		public static bool IsSynthetic(ulong id) => id < FirstRealSteamId;
 
 		private static readonly object Sync = new object();

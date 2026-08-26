@@ -52,6 +52,7 @@ gone.** Every caller signs — the hosting endpoint, the launcher
 | `GET /api/v1/health` | none | **200 only when the world is running**, else 503 |
 | `GET /api/v1/players` | none | names + durations, no ids |
 | `GET /api/v1/manifest` | none | the server's real loaded plugin set |
+| `POST /api/v1/identity` | none | a modded client claims its own SteamID64; the answer never varies |
 | `GET /api/v1/status` | loopback, or signed | the panel document, ids included |
 | `POST /api/v1/save` | loopback, or signed | flush the world now |
 | `POST /api/v1/console` | signed | one host command |
@@ -146,6 +147,41 @@ it. `server_mods` is read from BepInEx's own chainloader, so it names what is ac
 than what happens to be on disk. The curated lists are empty on a hosted instance because
 this product ships no mod picker for this game; the launcher hides an empty curated section rather
 than rendering a card that apologises for itself.
+
+## `POST /api/v1/identity`
+
+Request `{"clientId": "3", "steamId": "76561197960287930", "name": "Steve"}` - both numbers as
+**decimal strings**, because a SteamID64 does not survive every JSON number path. Reply
+`{"ok": true}`, always: nothing in the response varies with the claim's fate, so a probe cannot
+learn who is aboard by watching this route.
+
+A client running DriftwoodConnect posts its own real SteamID64 the moment it connects, and the
+spawn that follows keys the player's save record on the **person** instead of on a connection
+slot (game 1.0.6 stopped sending the id, so an unmodded player's character is keyed on a
+synthetic per-connection identity and a rejoin onto a different slot lands somebody else's
+body). A client that sends nothing keeps the synthetic fallback; joining and playing never
+depend on a claim.
+
+Public by necessity - the claimant holds no credential yet - and bounded by what a claim is
+allowed to say:
+
+- only an **issuable individual-account SteamID64** is claimable: never the host's reserved
+  identity, never the synthetic per-connection range, never a malformed id;
+- the claim must arrive **from the same IP address the claimed connection plays from**, read
+  off the HTTP socket itself, never a header. Unparseable addresses fail closed;
+- the claimed connection must be live and remote, the id must collide with nobody aboard
+  (claimed or spawned), and the **first valid claim wins for the connection's life** - it
+  cannot be swapped under a spawned character. A claim that arrives after the spawn only
+  attaches the display name;
+- claims are rate-limited and the table is bounded; a dropped claim degrades to the synthetic
+  fallback, never to an unverified identity.
+
+**What this deliberately does not prove: Steam account ownership.** The server runs without a
+Steam client, so a claim asserts an id the way the game's own 1.0.4/1.0.5 join flow did - the
+client states it, nothing countersigns it. Someone who knows an absent player's SteamID64 and
+runs a modded client can claim it and inherit that saved character; that is the game's own
+historical trust model, restored, not widened. The name is display-only, sanitised, and
+corrected by the Steam Web API resolver when a key is configured.
 
 ## `POST /api/v1/console`
 
