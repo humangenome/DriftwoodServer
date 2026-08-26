@@ -27,6 +27,11 @@
     <Compile Include="$(HostModDir)HeadlessPatches.cs" Link="Shared/HeadlessPatches.cs" />
     <Compile Include="$(HostModDir)SteamGuards.cs" Link="Shared/SteamGuards.cs" />
     <Compile Include="$(HostModDir)DriftwoodIdentity.cs" Link="Shared/DriftwoodIdentity.cs" />
+    <!-- DriftwoodIdentity aliases its FirstRealSteamId constant from IdentityClaimRules (the
+         dependency-free rules file the test suite links), so any build that links the one
+         must link the other - the 0.1.7 alias broke this rig's build in exactly the way the
+         Silence delegate commit fixed for Plugin.Log. -->
+    <Compile Include="$(HostModDir)IdentityClaimRules.cs" Link="Shared/IdentityClaimRules.cs" />
   </ItemGroup>
 
   <ItemGroup>
