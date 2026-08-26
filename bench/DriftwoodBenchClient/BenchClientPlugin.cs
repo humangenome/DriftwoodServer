@@ -33,6 +33,9 @@ namespace DriftwoodBenchClient
 		private ConfigEntry<bool> _walk;
 		private ConfigEntry<float> _turnSeconds;
 		private ConfigEntry<float> _startDelay;
+		private ConfigEntry<string> _chatLines;
+		private ConfigEntry<float> _chatStart;
+		private ConfigEntry<float> _chatGap;
 
 		private FieldInfo _moveInputField;
 		private FieldInfo _sprintInputField;
@@ -40,6 +43,7 @@ namespace DriftwoodBenchClient
 		private float _nextTurn;
 		private float _nextHop;
 		private Vector3 _origin;
+		private Vector3 _spawnSeen;
 		private int _hops;
 		private Vector2 _direction = Vector2.up;
 		private readonly System.Random _random = new System.Random();
@@ -54,6 +58,14 @@ namespace DriftwoodBenchClient
 			_walk = Config.Bind("Bench", "Walk", true, "Drive the player's movement input so the host has to simulate a moving body.");
 			_turnSeconds = Config.Bind("Bench", "TurnSeconds", 4f, "How often to pick a new direction.");
 			_startDelay = Config.Bind("Bench", "StartDelaySeconds", 12f, "Seconds before dialling.");
+			// The chat harness. The product feature under test is server-side player chat commands
+			// (!stuck, !playtime, !top, !help): a vanilla client types them into the game's own chat
+			// and the host answers. There is no way to prove that path from the server alone - it
+			// needs a real connection, a real Player and a real ServerRpc - so this rig sends the
+			// lines itself, exactly as ChatManager.SendTypedMessage does, and logs what comes back.
+			_chatLines = Config.Bind("Bench", "ChatLines", "", "Semicolon-separated chat lines to send once spawned. Empty = send nothing.");
+			_chatStart = Config.Bind("Bench", "ChatStartSeconds", 10f, "Seconds after spawn before the first chat line.");
+			_chatGap = Config.Bind("Bench", "ChatGapSeconds", 6f, "Seconds between chat lines. Keep above the server's per-player reply gap.");
 
 			// The client is headless too, so it needs the same guards. In particular
 			// SteamFriends.GetPersonaName / GetFriendPersonaName: without them Player.OnStartClient
@@ -87,6 +99,29 @@ namespace DriftwoodBenchClient
 			catch (Exception exception)
 			{
 				Logger.LogWarning("Could not unblock player input: " + exception.Message);
+			}
+
+			// Log every chat line this client RECEIVES, and swallow it. The observers broadcast
+			// lands in OnlineChatManager's RPC logic, which hands off to ChatManager - a UI
+			// component that does not exist headless - so a prefix that returns false both keeps
+			// the client alive and gives the run a transcript of the server's answers.
+			try
+			{
+				Harmony chat = new Harmony("com.humangenome.driftwood.benchclient.chat");
+				MethodInfo received = AccessTools.Method(
+					AccessTools.TypeByName("OnlineChatManager"), "RpcLogic___SendChatMessage___3264264606",
+					new[] { typeof(ulong), typeof(string) });
+				if (received != null)
+				{
+					chat.Patch(received, prefix: new HarmonyMethod(
+						AccessTools.Method(typeof(BenchClientPlugin), nameof(ChatReceivedPrefix))));
+					Logger.LogInfo("BENCH_CHAT_HOOK ok");
+				}
+				else Logger.LogWarning("BENCH_CHAT_HOOK missing - cannot record the server's replies.");
+			}
+			catch (Exception exception)
+			{
+				Logger.LogWarning("BENCH_CHAT_HOOK failed: " + exception.Message);
 			}
 
 			QualitySettings.vSyncCount = 0;
@@ -140,6 +175,8 @@ namespace DriftwoodBenchClient
 			_sprintInputField = AccessTools.Field(movementType, "_sprintInput");
 			Logger.LogInfo("BENCH_SPAWNED localPlayer=true moveInputField=" + (_moveInputField != null));
 
+			StartCoroutine(ChatScript());
+
 			while (true)
 			{
 				yield return new WaitForSecondsRealtime(5f);
@@ -150,6 +187,84 @@ namespace DriftwoodBenchClient
 		}
 
 		private static void NeverBlockInputs(ref bool __result) => __result = false;
+
+		// false = do not run the game's own handler (ChatManager is UI and absent headless).
+		private static bool ChatReceivedPrefix(ulong __0, string __1)
+		{
+			L?.LogInfo("BENCH_CHAT_RECV from=" + __0 + " text=" + (__1 ?? string.Empty));
+			return false;
+		}
+
+		// Sends each configured line through the game's OWN ServerRpc - the same call
+		// ChatManager.SendTypedMessage makes when a player presses Enter - so the server sees a
+		// genuine inbound chat message on a genuine connection. Position is logged around each
+		// line so a teleport the server orders is visible as a real move.
+		private IEnumerator ChatScript()
+		{
+			string configured = (_chatLines.Value ?? string.Empty).Trim();
+			if (configured.Length == 0) yield break;
+			try { if (Player.LocalPlayer != null) _spawnSeen = Player.LocalPlayer.Transform.position; } catch { }
+			L?.LogInfo("BENCH_CHAT_START spawnSeen=" + _spawnSeen.ToString("F1"));
+			string[] lines = configured.Split(';');
+
+			yield return new WaitForSecondsRealtime(_chatStart.Value);
+
+			for (int i = 0; i < lines.Length; i++)
+			{
+				string line = lines[i].Trim();
+				if (line.Length == 0) continue;
+
+				// "@move" is a harness step, not a chat line: walk the character away from the
+				// island spawn so a server-ordered teleport back to it is a MEASURABLE move.
+				// A player that is already standing on the spawn proves nothing about !stuck.
+				if (line.StartsWith("@move", StringComparison.OrdinalIgnoreCase) || line.StartsWith("#move", StringComparison.OrdinalIgnoreCase))
+				{
+					try
+					{
+						if (Player.LocalPlayer != null)
+						{
+							if (_spawnSeen == Vector3.zero) _spawnSeen = Player.LocalPlayer.Transform.position;
+							Vector3 away = _spawnSeen + new Vector3(60f, 0f, 60f);
+							Player.LocalPlayer.LocalTeleport(away, 0f);
+							L?.LogInfo("BENCH_CHAT_MOVE to=" + away.ToString("F1") + " spawnSeen=" + _spawnSeen.ToString("F1"));
+						}
+					}
+					catch (Exception exception) { L?.LogError("BENCH_CHAT_MOVE failed: " + exception.Message); }
+					yield return new WaitForSecondsRealtime(3f);
+					continue;
+				}
+
+				ulong id = 0UL;
+				Vector3 before = Vector3.zero;
+				try
+				{
+					if (Player.LocalPlayer == null) { L?.LogWarning("BENCH_CHAT_SEND skipped - no local player."); continue; }
+					id = Player.LocalPlayer.SteamID;
+					before = Player.LocalPlayer.Transform.position;
+					L?.LogInfo("BENCH_CHAT_SEND from=" + id + " pos=" + before.ToString("F1") + " text=" + line);
+					Server.Instance.SendChatMessage(id, line);
+				}
+				catch (Exception exception)
+				{
+					L?.LogError("BENCH_CHAT_SEND failed: " + exception);
+				}
+
+				yield return new WaitForSecondsRealtime(_chatGap.Value);
+
+				try
+				{
+					if (Player.LocalPlayer != null)
+					{
+						Vector3 after = Player.LocalPlayer.Transform.position;
+						L?.LogInfo("BENCH_CHAT_AFTER text=" + line + " pos=" + after.ToString("F1") +
+							" moved=" + Vector3.Distance(before, after).ToString("F1") +
+							" distToSpawnSeen=" + (_spawnSeen == Vector3.zero ? "?" : Vector3.Distance(_spawnSeen, after).ToString("F1")));
+					}
+				}
+				catch { }
+			}
+			L?.LogInfo("BENCH_CHAT_DONE");
+		}
 
 		private void FixedUpdate()
 		{

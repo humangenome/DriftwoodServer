@@ -870,6 +870,12 @@ namespace DriftwoodHost
 				.Add("islandRadius", worldRunning ? _readiness.IslandRadius : 0d)
 				.Add("uptimeSeconds", _readiness.UptimeSeconds)
 				.AddRaw("positions", worldRunning ? PositionsJson() : "[]")
+				// The catch leaderboard's top rows, ids included: this surface is loopback or
+				// signed, the same trust as the roster above. The public /players route never
+				// carries it.
+				.Add("playerChatCommands", _readiness.PlayerChatState)
+				.Add("leaderboardState", _readiness.LeaderboardState)
+				.AddRaw("leaderboard", string.IsNullOrEmpty(_readiness.LeaderboardJson) ? "[]" : _readiness.LeaderboardJson)
 				.Close();
 		}
 

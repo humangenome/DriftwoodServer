@@ -152,6 +152,10 @@ DRIFTWOOD_HOSTING port=22003 slots=8 world=Driftwood pid=4242
 
 Everyone joins from the Driftwood app: add `<your address>:22003`, **Connect**.
 
+Once in, players can type `!help`, `!stuck` (back to the island spawn), `!playtime` and `!top`
+(the catch leaderboard) into the game's own chat - nothing to install. The owner's console has
+`rescue <player>` and `top` for the same two things from the outside.
+
 ## 8. Stop, back up, keep it running
 
 - **Stop:** `Ctrl+C` in the console, or create a file named `stop.requested` in `host-state\`.

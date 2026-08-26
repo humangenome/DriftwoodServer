@@ -200,6 +200,7 @@ own chat RPC invoked from the server, which every vanilla client renders as a `[
 help  status  players  version  world  save  snapshot  snapshots
 kick  block  unblock  blocked  say  audit
 money  island  spawn  killboss
+rescue  top
 ```
 
 - `players` on this console carries the **SteamID64** beside each name — the caller authenticated,
@@ -222,7 +223,7 @@ money  island  spawn  killboss
   broadcast is recorded to `Logs\owner-actions.log` — timestamp, actor, verb, target, ok/refused,
   detail — with the actor **transport-derived, never claimed**: `panel` for a loopback caller,
   `console` for a remote caller that proved itself with the signed API secret, `server` for the
-  block-list sweep itself. "Your host kicked me for no reason" arrives in a support ticket days
+  block-list sweep itself, `chat` for a player's own `!stuck` (the target column names them). "Your host kicked me for no reason" arrives in a support ticket days
   later, and this line is the difference between an answer and a shrug.
 
 The gameplay commands ride the game's own host-gated dev suite (`DazedCommands` and the managers
@@ -247,10 +248,99 @@ for a local player and a camera a headless host does not have:
   lands, so the death, the trophy and the progression follow the game's own kill flow. Refuses in
   a sentence when no boss is up or the boss is in an invulnerable phase.
 
+The player-facing layer, from the owner's side:
+
+- `rescue <SteamID64 or name>` sends a connected player back to the island spawn - the same
+  teleport a player gets by typing `!stuck` in chat, with the same refusals (see below), audited
+  as `rescue`.
+- `top [n]` prints the catch leaderboard: rank, name, catches, earnings, bosses, playtime and
+  best catch, ranked by earnings (default 10 rows). `leaderboard` is an alias. Also carried by
+  `/status` as `leaderboard` for a panel card.
+
 `stop`, `restart`, `op` and friends are **named refusals**: they answer with where that thing
 actually lives rather than with "unknown command", which would read as a typo. Lifecycle
 is deliberately absent — the panel's stop and restart flush the world and take a backup first, and a
 console shortcut past that ordering would be a data-safety regression dressed as a convenience.
+
+## Player chat commands (no route - the game's own chat)
+
+Players type these into the game's ordinary chat box. Vanilla clients, nothing to install:
+the game already sends every chat line to this server (`Server.SendChatMessage`, a ServerRpc
+whose only server-side job is to rebroadcast), and the host answers on the same pipe.
+
+```
+!help      the list
+!stuck     teleport yourself back to the island spawn (the shore by the wreck)
+!playtime  your time on this server, this session and in total
+!top       the catch leaderboard's top three, and your own rank
+```
+
+- A command line is **not rebroadcast** - the crew sees the server's answer, not the request.
+  Anything that is not `!` followed by a letter (`!!!`, `! hi`) is ordinary chat and passes
+  through untouched.
+- **Replies are public.** The game has no private server-to-player chat (its one server chat
+  pipe is an observers broadcast), so every answer is a `[Server]` line addressed by name that
+  everyone sees. Hence the throttle: one reply per player per 3 s and at most 12 crew-wide per
+  10 s, excess dropped silently; `!stuck` has its own per-player cooldown (`[Chat]
+  StuckCooldownSeconds`, default 60) whose refusal names the seconds remaining.
+- The sender is the player whose **transport connection** the line arrived on (a prefix on the
+  RPC reader captures it), never the id the client wrote into the message.
+- **How `!stuck` works, and what "server-authoritative" means here.** A player's position is
+  client-owned in this game - the server relays positions, it never simulates a player - and the
+  one movement primitive the game ships is a server-to-owner order, `Player.RPCTeleport`, which
+  the owning client obeys by running its own teleport and then reporting the new position flagged
+  so every other client snaps its proxy. That is exactly how an island change moves the whole crew.
+  The server decides whether and where; the client carries it out. The destination is the island's
+  authored spawn transform (`SpawnManager.PlayerSpawnPos/Rot`), the same point the game uses for a
+  fresh spawn, a respawn and an island arrival.
+- **Refusals**, all decided on server state: the world is not running; an island change is in
+  progress or finished less than 5 s ago (the game's own guard); no island is loaded; the player
+  is down (the game's own respawn is the way back); a boss fight is on (the game blocks giving up
+  during a boss for the same reason); the player is driving the boat (the client glues the driver
+  to the wheel every frame, so the teleport would be undone within a frame); cooldown.
+- Every `!stuck`, granted or refused, lands in `owner-actions.log` with actor `chat`.
+
+Off switch: `[Chat] PlayerCommands = false`. Readiness carries `playerChatCommands` as one
+sentence: `on (!help, !stuck, !playtime, !top)` / `off (...)`.
+
+## The catch leaderboard (carried by `/status`, no route of its own)
+
+`/status` and the readiness document carry `leaderboard`: the top ten rows as
+
+```json
+[{"rank":1,"steamId":"7656119...","name":"Ryan","catches":12,"earnings":3450,"bosses":1,
+  "playtimeSeconds":8040,"bestCatch":"Tuna","bestCatchWorth":800,"lastSeenUnix":1756100000}]
+```
+
+and `leaderboardState` as one sentence (`on (N player(s) on the board)` / `off (...)`). Ids are
+included because this surface is loopback or signed - the same trust as the roster; the public
+`/players` route never carries it.
+
+**Where the numbers come from** - every one a server-side event in the game's own flow:
+
+| column | event | why it is honest |
+|---|---|---|
+| catches | a fish the server hooked on player P's rod is later held by anyone | the bite is rolled by `CreatureManager.HookItem`, server-only, which ties the new fish to the rod's holder; the landing is the server's own holder write (`Item.SetSyncedHolder`). Credit goes to the angler who hooked it, not the hand that grabbed it |
+| earnings | `MoneyManager.SellItem` (the sell box, server-side) for an item whose bite this server saw; else the item's `LastHolder` | the sale is the moment the shared wallet is paid |
+| bosses | `Server.HitCreature` leaves a boss at zero HP; the player the hit names | the console's `killboss` credits nobody, deliberately |
+| playtime | seconds between consecutive roster samples in which the player was present | this server's clock, never the client's |
+
+Not claimed, because it cannot be attributed: a boss killed by an explosion (that path carries
+no player), a fish that died to a fall or a bird before anyone held it.
+
+**Only identified players get rows.** Game 1.0.6 stopped sending a joining player's SteamID64,
+so an unmodded player is keyed on a synthetic per-connection identity - a connection SLOT that
+FishNet reuses. A row keyed on a slot would migrate to whoever lands that slot next, and a
+leaderboard that credits the wrong player is worse than none - so the board refuses every id
+below the first real SteamID64 and counts a player from the moment their client claims its real
+id (`POST /api/v1/identity`, the DriftwoodConnect claim). Until then their catches go
+unrecorded, deliberately, rather than recorded against a stranger-to-be.
+
+**Where it lives:** `<SaveRoot>\<world>.leaderboard.tsv`, one tab-separated row per SteamID64,
+beside the world save - deliberately WITH the world, so a snapshot or a panel backup carries it and
+a world restored to last Tuesday shows last Tuesday's board, the same way it shows last Tuesday's
+money. The game's own loader reads only `*.txt` there. Flushed at most once a minute when
+something changed, and on shutdown. Off switch: `[Leaderboard] Enabled = false`.
 
 ## `GET|POST /api/v1/snapshots...`
 

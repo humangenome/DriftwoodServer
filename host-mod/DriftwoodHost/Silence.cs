@@ -53,6 +53,11 @@ namespace DriftwoodHost
 		// Without this, MuteAudio was a key the mod read and never consumed: a support person
 		// could set it to false, see it accepted, see it echoed back as recognised, and hear
 		// nothing change. That is the silently-ignored-config shape this product exists to refuse.
+		// The bench rig LINKS this file and has no Plugin type, so the warning goes through a
+		// delegate the host mod sets at boot rather than a direct Plugin.Log call. A direct
+		// reference here compiled in the host mod and broke the bench build in silence.
+		internal static System.Action<string> LogWarning = null;
+
 		internal static void Release()
 		{
 			if (_instance == null) return;
@@ -60,7 +65,7 @@ namespace DriftwoodHost
 			_instance = null;
 			AudioListener.pause = false;
 			AudioListener.volume = 1f;
-			Plugin.Log?.LogWarning("MuteAudio is false, so the audio engine has been released. On a host with a real audio device this server will make NOISE on the machine it runs on.");
+			LogWarning?.Invoke("MuteAudio is false, so the audio engine has been released. On a host with a real audio device this server will make NOISE on the machine it runs on.");
 		}
 
 		private void Update()

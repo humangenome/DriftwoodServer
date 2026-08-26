@@ -102,6 +102,13 @@ namespace DriftwoodHost
 		// Seconds since this host process started, so a public page can say how long the
 		// server has been up without a panel round trip.
 		public double UptimeSeconds;
+		// Same one-sentence contract for the player chat commands and the catch leaderboard:
+		// "on (...)" / "off (...)".
+		public string PlayerChatState = string.Empty;
+		public string LeaderboardState = string.Empty;
+		// The top of the catch leaderboard as a JSON array (see CatchLedger.TopJson); "[]"
+		// when the board is off or empty.
+		public string LeaderboardJson = "[]";
 		public bool LoopIdling;
 		public int IdleTransitions;
 		public int WorldResumeCount;
@@ -202,6 +209,9 @@ namespace DriftwoodHost
 					.Add("islandUnlocked", WorldRunning ? IslandUnlocked : 0)
 					.Add("wallet", WorldRunning ? Wallet : -1)
 					.Add("uptimeSeconds", UptimeSeconds)
+					.Add("playerChatCommands", PlayerChatState)
+					.Add("leaderboardState", LeaderboardState)
+					.AddRaw("leaderboard", string.IsNullOrEmpty(LeaderboardJson) ? "[]" : LeaderboardJson)
 					.Add("effectiveBindAddress", EffectiveBindAddress)
 					.Add("effectiveTargetFrameRate", EffectiveTargetFrameRate)
 					.Add("actualFrameRate", ActualFrameRate)
