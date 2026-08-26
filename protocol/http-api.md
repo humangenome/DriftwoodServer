@@ -328,6 +328,14 @@ included because this surface is loopback or signed - the same trust as the rost
 Not claimed, because it cannot be attributed: a boss killed by an explosion (that path carries
 no player), a fish that died to a fall or a bird before anyone held it.
 
+**Only identified players get rows.** Game 1.0.6 stopped sending a joining player's SteamID64,
+so an unmodded player is keyed on a synthetic per-connection identity - a connection SLOT that
+FishNet reuses. A row keyed on a slot would migrate to whoever lands that slot next, and a
+leaderboard that credits the wrong player is worse than none - so the board refuses every id
+below the first real SteamID64 and counts a player from the moment their client claims its real
+id (`POST /api/v1/identity`, the DriftwoodConnect claim). Until then their catches go
+unrecorded, deliberately, rather than recorded against a stranger-to-be.
+
 **Where it lives:** `<SaveRoot>\<world>.leaderboard.tsv`, one tab-separated row per SteamID64,
 beside the world save - deliberately WITH the world, so a snapshot or a panel backup carries it and
 a world restored to last Tuesday shows last Tuesday's board, the same way it shows last Tuesday's

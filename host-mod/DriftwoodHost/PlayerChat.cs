@@ -85,7 +85,7 @@ namespace DriftwoodHost
 				Necessity = PatchNecessity.Optional,
 				Group = GroupName,
 				Prefix = AccessTools.Method(typeof(PlayerChat), nameof(ReaderPrefix)),
-				Postfix = AccessTools.Method(typeof(PlayerChat), nameof(ReaderPostfix)),
+				Finalizer = AccessTools.Method(typeof(PlayerChat), nameof(ReaderFinalizer)),
 				Why = "Captures the connection a chat line arrived on, so a player command is attributed by transport, not by the client's claim."
 			};
 			yield return new PatchTarget
@@ -111,9 +111,14 @@ namespace DriftwoodHost
 			_currentSender = __2;
 		}
 
-		private static void ReaderPostfix()
+		// A FINALIZER, not a postfix, for the same reason SpawnIdentity uses one: a reader
+		// that throws would leave the previous sender in the field, and the next server-side
+		// call into the logic would be attributed to a stale connection. The game's own
+		// exception passes through untouched.
+		private static Exception ReaderFinalizer(Exception __exception)
 		{
 			_currentSender = null;
+			return __exception;
 		}
 
 		// true  = not a command (or the feature is off): let the game relay the line.
@@ -165,7 +170,7 @@ namespace DriftwoodHost
 			switch (verb)
 			{
 				case "help":
-					Reply(sender.Name + ": " + PlayerCommands.HelpLine(CatchLedger.Enabled));
+					Reply(PlayerCommands.ChatSafe(sender.Name) + ": " + PlayerCommands.HelpLine(CatchLedger.Enabled));
 					return;
 
 				case "stuck":
@@ -181,7 +186,7 @@ namespace DriftwoodHost
 					return;
 
 				default:
-					Reply(sender.Name + ": there is no !" + verb + " - try !help");
+					Reply(PlayerCommands.ChatSafe(sender.Name) + ": there is no !" + verb + " - try !help");
 					return;
 			}
 		}
@@ -192,7 +197,7 @@ namespace DriftwoodHost
 			double remaining = _cooldowns.StuckRemaining(sender.SteamId, now);
 			if (remaining > 0)
 			{
-				Reply(sender.Name + ": !stuck is on cooldown for another " + Math.Ceiling(remaining).ToString(CultureInfo.InvariantCulture) + "s.");
+				Reply(PlayerCommands.ChatSafe(sender.Name) + ": !stuck is on cooldown for another " + Math.Ceiling(remaining).ToString(CultureInfo.InvariantCulture) + "s.");
 				return;
 			}
 
@@ -203,11 +208,11 @@ namespace DriftwoodHost
 			OwnerAudit.Record("chat", "stuck", target, failure == null, failure ?? ("teleported to the " + where));
 			if (failure != null)
 			{
-				Reply(sender.Name + ": " + failure);
+				Reply(PlayerCommands.ChatSafe(sender.Name) + ": " + failure);
 				return;
 			}
 			_cooldowns.MarkStuck(sender.SteamId, now);
-			Reply(sender.Name + ": sending you back to the island spawn.");
+			Reply(PlayerCommands.ChatSafe(sender.Name) + ": sending you back to the island spawn.");
 		}
 
 		private static void Playtime(OwnerActions.Found sender)
@@ -219,7 +224,7 @@ namespace DriftwoodHost
 				session = row.ConnectedSeconds;
 				break;
 			}
-			string line = sender.Name + ": ";
+			string line = PlayerCommands.ChatSafe(sender.Name) + ": ";
 			line += session < 0
 				? "you have just arrived"
 				: "you have been on this server for " + PlayerCommands.Duration(session) + " this session";
@@ -238,20 +243,20 @@ namespace DriftwoodHost
 		{
 			if (!CatchLedger.Enabled)
 			{
-				Reply(sender.Name + ": the catch leaderboard is off on this server.");
+				Reply(PlayerCommands.ChatSafe(sender.Name) + ": the catch leaderboard is off on this server.");
 				return;
 			}
 			List<CatchLedger.Entry> top = CatchLedger.Top(3);
 			if (top.Count == 0)
 			{
-				Reply(sender.Name + ": nobody has sold a catch on this server yet - the leaderboard starts with the first sale.");
+				Reply(PlayerCommands.ChatSafe(sender.Name) + ": nobody is on the board yet - it counts identified players from their first landed or sold catch.");
 				return;
 			}
 			System.Text.StringBuilder builder = new System.Text.StringBuilder("Top anglers: ");
 			for (int i = 0; i < top.Count; i++)
 			{
 				if (i > 0) builder.Append("  ");
-				builder.Append(i + 1).Append(". ").Append(top[i].Name.Length == 0 ? "?" : top[i].Name)
+				builder.Append(i + 1).Append(". ").Append(top[i].Name.Length == 0 ? "?" : PlayerCommands.ChatSafe(top[i].Name))
 					.Append(' ').Append(PlayerCommands.Money(top[i].Earnings))
 					.Append(" (").Append(top[i].Catches).Append(top[i].Catches == 1 ? " catch)" : " catches)");
 			}

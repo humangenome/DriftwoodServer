@@ -162,7 +162,7 @@ namespace DriftwoodHost
 				if (angler == null) return;
 				ulong steamId = 0UL;
 				try { steamId = angler.SteamID; } catch { }
-				if (steamId == 0UL || steamId == DriftwoodIdentity.HostSteamId) return;
+				if (DriftwoodIdentity.IsSynthetic(steamId)) return;
 
 				Prune();
 				ByInstance[__instance] = new Hooked
@@ -230,7 +230,7 @@ namespace DriftwoodHost
 						name = NameOf(steamId, last);
 					}
 				}
-				if (steamId == 0UL || steamId == DriftwoodIdentity.HostSteamId) return true;
+				if (DriftwoodIdentity.IsSynthetic(steamId)) return true;
 				CatchLedger.RecordSale(steamId, name, worth, PlayerDirectory.NowUnix());
 				RefreshState();
 			}
@@ -253,7 +253,7 @@ namespace DriftwoodHost
 				CreditedBosses.Add(__0);
 				ulong steamId = 0UL;
 				try { steamId = __1.SteamID; } catch { }
-				if (steamId == 0UL || steamId == DriftwoodIdentity.HostSteamId) return;
+				if (DriftwoodIdentity.IsSynthetic(steamId)) return;
 				CatchLedger.RecordBoss(steamId, NameOf(steamId, __1), PlayerDirectory.NowUnix());
 				RefreshState();
 			}

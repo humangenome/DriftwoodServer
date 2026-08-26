@@ -24,7 +24,11 @@ All notable changes to DriftwoodServer are recorded here.
   the game's own flow - the bite the server rolled (`CreatureManager.HookItem` ties the new
   fish to the rod's holder), the server's holder write when it is landed, the sell box's sale,
   and the server-side hit that finishes a boss. Nothing is a client's claim about itself, and
-  what cannot be attributed (an explosion kill, a fish nobody held) is simply absent. Kept at
+  what cannot be attributed (an explosion kill, a fish nobody held) is simply absent. Only
+  identified players get rows: an unmodded player rides a synthetic per-connection id - a slot
+  number FishNet reuses - and a row keyed on a slot would migrate to whoever lands it next, so
+  the board refuses every id below the first real SteamID64 and starts counting a player when
+  their client claims its real identity. Kept at
   `<SaveRoot>\<world>.leaderboard.tsv` beside the world save so snapshots, restores and panel
   backups carry it with the world; `top [n]` on the console prints it; `/status` and the
   readiness document carry the top ten as `leaderboard` for a panel card. Off switch:

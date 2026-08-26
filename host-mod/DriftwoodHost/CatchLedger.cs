@@ -67,6 +67,16 @@ namespace DriftwoodHost
 		// linkable into the dependency-free test build.
 		internal const ulong HostSteamId = 76561190000000001UL;
 
+		// The board refuses every id below the first SteamID64 Valve ever issued - the host
+		// placeholder AND the per-connection synthetic range (SpawnIdentity.cs). A synthetic id
+		// is a connection SLOT, and FishNet reuses slots: a row keyed on one would migrate to
+		// whoever lands that slot next, and a leaderboard that credits the wrong player is
+		// worse than none. So an unmodded player (no identity claim, no launcher-supplied id)
+		// gets no row at all rather than a row that will one day belong to a stranger; the
+		// moment their client claims a real id (IdentityClaims.cs), their rows are theirs for
+		// good. The constant is IdentityClaimRules.FirstRealSteamId, a file as dependency-free
+		// as this one.
+
 		// Explicitly null-initialised: in the linked test build nothing assigns them.
 		internal static Action<string> LogWarning = null;
 		internal static Action<string> LogInfo = null;
@@ -141,8 +151,9 @@ namespace DriftwoodHost
 		}
 
 		// ------------------------------------------------------------------
-		// Recording. Every method is cheap, lock-guarded and safe from any thread, and a
-		// zero or host id is ignored rather than becoming a row.
+		// Recording. Every method is cheap, lock-guarded and safe from any thread, and an id
+		// below the first real SteamID64 - zero, the host, a synthetic connection slot - is
+		// ignored rather than becoming a row (see the note on HostSteamId above).
 		// ------------------------------------------------------------------
 
 		internal static void RecordCatch(ulong steamId, string name, string creatureName, int worth, long nowUnix)
@@ -467,7 +478,7 @@ namespace DriftwoodHost
 		// stamp. Returns null for ids that must never become rows.
 		private static Entry Touch(ulong steamId, string name, long nowUnix)
 		{
-			if (steamId == 0UL || steamId == HostSteamId) return null;
+			if (steamId < IdentityClaimRules.FirstRealSteamId) return null;
 			Entry entry;
 			if (!Entries.TryGetValue(steamId, out entry))
 			{

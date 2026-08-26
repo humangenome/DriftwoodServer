@@ -46,6 +46,27 @@ public class PlayerCommandsTests
     }
 
     [Fact]
+    public void AKeyboardLeanIsOrdinaryChatNotACommand()
+    {
+        // The unknown-verb reply echoes the verb back at the whole crew, so a "verb" longer
+        // than any real command must stay ordinary chat rather than be amplified.
+        Assert.False(PlayerCommands.TryParse("!" + new string('a', PlayerCommands.MaxVerbLength + 1), out _, out _));
+        Assert.True(PlayerCommands.TryParse("!" + new string('a', PlayerCommands.MaxVerbLength), out _, out _));
+    }
+
+    [Theory]
+    [InlineData("Steve", "Steve")]
+    [InlineData("<size=200>Steve", "size=200>Steve")]
+    [InlineData("<<i>>", "i>>")]
+    [InlineData("", "")]
+    public void ChatBoundNamesCannotOpenARichTextTag(string name, string expected)
+    {
+        // The game's chat renders TextMeshPro markup (its own save notice ships in <i>), so
+        // a name that reaches a broadcast line loses the character that opens a tag.
+        Assert.Equal(expected, PlayerCommands.ChatSafe(name));
+    }
+
+    [Fact]
     public void EveryNamedCommandIsKnownAndInTheHelpLine()
     {
         string help = PlayerCommands.HelpLine(leaderboardOn: true);

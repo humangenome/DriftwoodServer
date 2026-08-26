@@ -603,7 +603,7 @@ namespace DriftwoodHost
 				return "usage: top [how many rows]";
 			}
 			List<CatchLedger.Entry> rows = CatchLedger.Top(count);
-			if (rows.Count == 0) return "nobody is on the board yet - it starts with the first bite that gets landed or sold. (" + CatchHooks.State + ")";
+			if (rows.Count == 0) return "nobody is on the board yet. It counts identified players only (the Driftwood app's identity claim; a synthetic per-connection id never gets a row), from their first landed or sold catch. (" + CatchHooks.State + ")";
 			StringBuilder builder = new StringBuilder();
 			builder.Append("#   name                  catches  earnings    bosses  playtime   best catch").Append(NewLine);
 			for (int i = 0; i < rows.Count; i++)
@@ -624,7 +624,7 @@ namespace DriftwoodHost
 				else builder.Append('-');
 			}
 			builder.Append(NewLine).Append(NewLine)
-				.Append("Ranked by earnings. Catches are fish landed after this server hooked them; earnings are sales credited to the angler who hooked the item.")
+				.Append("Ranked by earnings. Catches are fish landed after this server hooked them; earnings are sales credited to the angler who hooked the item. Identified players only - a synthetic per-connection id never gets a row.")
 				.Append(NewLine).Append("File: ").Append(CatchLedger.Path_);
 			return builder.ToString();
 		}

@@ -88,7 +88,10 @@ StuckCooldownSeconds = 60      ; OPTIONAL. Per-player cooldown on the !stuck tel
 Enabled = true                 ; OPTIONAL, default on. The per-player catch leaderboard
                                ; (catches, earnings, bosses, playtime), kept at
                                ; <SaveRoot>\<World.Name>.leaderboard.tsv beside the world save
-                               ; and published on /status as `leaderboard`.
+                               ; and published on /status as `leaderboard`. Counts identified
+                               ; players only (the client's identity claim); a player on a
+                               ; synthetic per-connection id gets no row rather than a row
+                               ; that would migrate to whoever lands that slot next.
 
 [World]
 Name = Driftwood               ; a FILENAME: the save is <SaveRoot>\<Name>.txt. Never "local".

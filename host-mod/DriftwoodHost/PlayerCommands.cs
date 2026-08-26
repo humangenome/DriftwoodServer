@@ -24,6 +24,11 @@ namespace DriftwoodHost
 
 		internal const int MaxArgsLength = 64;
 
+		// No real command is anywhere near this long. A longer "verb" is somebody leaning on
+		// the keyboard (or a client probing), and it stays ordinary chat rather than earning a
+		// broadcast reply that echoes it back at the crew.
+		internal const int MaxVerbLength = 24;
+
 		// A command is "!" followed immediately by a letter. "!!!", "! hi" and "!1" are ordinary
 		// chat and pass through untouched - players use "!" for emphasis, and swallowing those
 		// lines would look like the server eating their messages.
@@ -38,6 +43,7 @@ namespace DriftwoodHost
 
 			int end = 1;
 			while (end < trimmed.Length && char.IsLetterOrDigit(trimmed[end])) end++;
+			if (end - 1 > MaxVerbLength) return false;
 			verb = trimmed.Substring(1, end - 1).ToLowerInvariant();
 			string rest = trimmed.Substring(end).Trim();
 			if (rest.Length > MaxArgsLength) rest = rest.Substring(0, MaxArgsLength);
@@ -83,6 +89,17 @@ namespace DriftwoodHost
 		internal static string Money(long amount)
 		{
 			return "$" + amount.ToString("N0", CultureInfo.InvariantCulture);
+		}
+
+		// A name on its way into a BROADCAST chat line. The game's chat renders TextMeshPro
+		// rich text (its own save notice is sent wrapped in <i>), so a persona name carrying
+		// "<size=..." would style-bomb every client's chat through the server's mouth. The
+		// roster, the console and the files keep the name as chosen; only the chat pipe
+		// strips the one character that opens a tag.
+		internal static string ChatSafe(string name)
+		{
+			if (string.IsNullOrEmpty(name)) return string.Empty;
+			return name.IndexOf('<') < 0 ? name : name.Replace("<", string.Empty);
 		}
 	}
 

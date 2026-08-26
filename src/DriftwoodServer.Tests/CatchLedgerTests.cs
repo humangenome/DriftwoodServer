@@ -11,6 +11,7 @@ public class CatchLedgerTests : IDisposable
     private readonly string _root = Path.Combine(Path.GetTempPath(), "driftwood-ledger-" + Guid.NewGuid().ToString("N"));
     private const ulong Ryan = 76561197960287930UL;
     private const ulong Bob = 76561198000000001UL;
+    private const ulong Carol = 76561198000000002UL;
 
     public CatchLedgerTests()
     {
@@ -78,16 +79,16 @@ public class CatchLedgerTests : IDisposable
         CatchLedger.RecordCatch(Ryan, "Ryan", "Tuna", 10, 1);
         CatchLedger.RecordCatch(Ryan, "Ryan", "Tuna", 10, 2);
         CatchLedger.RecordSale(Ryan, "Ryan", 20, 3);
-        CatchLedger.RecordCatch(3UL, "Cat", "Crab", 1, 4);
+        CatchLedger.RecordCatch(Carol, "Cat", "Crab", 1, 4);
 
         var top = CatchLedger.Top(10);
         Assert.Equal(3, top.Count);
         Assert.Equal(Bob, top[0].SteamId);
         Assert.Equal(Ryan, top[1].SteamId);
-        Assert.Equal(3UL, top[2].SteamId);
+        Assert.Equal(Carol, top[2].SteamId);
         Assert.Equal(1, CatchLedger.RankOf(Bob));
         Assert.Equal(2, CatchLedger.RankOf(Ryan));
-        Assert.Equal(0, CatchLedger.RankOf(99UL));
+        Assert.Equal(0, CatchLedger.RankOf(76561198099999999UL));
         Assert.Single(CatchLedger.Top(1));
     }
 
@@ -127,12 +128,23 @@ public class CatchLedgerTests : IDisposable
     }
 
     [Fact]
-    public void TheHostAndIdZeroNeverBecomeRows()
+    public void NothingBelowTheFirstRealSteamIdEverBecomesARow()
     {
+        // Zero, the host's reserved identity, and the per-connection synthetic range are all
+        // below the first id Valve ever issued. A synthetic id is a connection SLOT that
+        // FishNet reuses, so a row keyed on one would migrate to whoever lands the slot next
+        // - the exact wrong-player crediting the board exists to refuse. The boundary itself
+        // (the first issued id) is a real player and does get a row.
         CatchLedger.Initialise(_root, "Driftwood");
         CatchLedger.RecordSale(0UL, "nobody", 100, 1);
         CatchLedger.RecordSale(CatchLedger.HostSteamId, "Server", 100, 1);
+        CatchLedger.RecordSale(76561190000100003UL, "SlotThree", 100, 1);
+        CatchLedger.RecordCatch(76561190000100007UL, "SlotSeven", "Tuna", 50, 1);
+        CatchLedger.RecordBoss(IdentityClaimRules.FirstRealSteamId - 1UL, "AlmostReal", 1);
         Assert.Equal(0, CatchLedger.Count);
+
+        CatchLedger.RecordSale(IdentityClaimRules.FirstRealSteamId, "TheFirst", 100, 1);
+        Assert.Equal(1, CatchLedger.Count);
     }
 
     [Fact]
