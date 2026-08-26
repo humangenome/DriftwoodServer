@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using HarmonyLib;
 using Steamworks;
@@ -104,12 +105,22 @@ namespace DriftwoodHost
 			Prefix = AccessTools.Method(typeof(SteamGuards), replacement)
 		};
 
+		// Wired to SpawnIdentity.CurrentIdentity by the host mod at boot. A DELEGATE rather
+		// than a direct call for the same reason Silence warns through one: the bench rig
+		// links this file and has neither SpawnIdentity nor its FishNet dependency chain, and
+		// a direct reference compiled in the host mod while breaking the rig build in silence
+		// (it did, from 0.1.5 until this line). Null - the rig - answers the host placeholder,
+		// which is exactly what this guard answered before 0.1.5.
+		internal static Func<ulong> CurrentIdentity = null;
+
 		private static bool GetSteamId(ref CSteamID __result)
 		{
 			// Not a constant any more: game 1.0.6 calls this ON THE SERVER to decide who a
 			// joining player IS (see SpawnIdentity). Outside a remote spawn it still answers
-			// the host placeholder.
-			__result = new CSteamID(SpawnIdentity.CurrentIdentity());
+			// the host placeholder. Read once, fall back on null: this sits on the live join
+			// path and must answer something sane whatever the wiring state.
+			Func<ulong> current = CurrentIdentity;
+			__result = new CSteamID(current != null ? current() : DriftwoodIdentity.HostSteamId);
 			return false;
 		}
 

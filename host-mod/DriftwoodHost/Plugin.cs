@@ -67,6 +67,11 @@ namespace DriftwoodHost
 			Silence.LogWarning = message => Log?.LogWarning(message);
 			Silence.Install();
 
+			// The GetSteamID guard asks SpawnIdentity who is spawning right now. Wired here as
+			// a delegate because the bench rig links SteamGuards without SpawnIdentity's
+			// FishNet dependency chain - see the note on SteamGuards.CurrentIdentity.
+			SteamGuards.CurrentIdentity = SpawnIdentity.CurrentIdentity;
+
 			// Read the panel's file directly rather than through BepInEx's binder, so a key the
 			// panel writes under a different section or a near-miss name still lands, and any key
 			// that matched NOTHING is reported instead of silently ignored.
