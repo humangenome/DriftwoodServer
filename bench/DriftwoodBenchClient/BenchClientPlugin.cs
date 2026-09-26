@@ -175,14 +175,83 @@ namespace DriftwoodBenchClient
 			_sprintInputField = AccessTools.Field(movementType, "_sprintInput");
 			Logger.LogInfo("BENCH_SPAWNED localPlayer=true moveInputField=" + (_moveInputField != null));
 
-			StartCoroutine(ChatScript());
+			// Only when asked: the chat script binds Server.SendChatMessage at compile time, and a
+			// game build that changed that signature throws MissingMethodException at JIT.
+			if (!string.IsNullOrWhiteSpace(_chatLines.Value)) StartCoroutine(ChatScript());
 
+			Vector3 spawnedAt = Player.LocalPlayer.Transform.position;
+			float furthest = 0f;
+			int respawns = 0;
 			while (true)
 			{
 				yield return new WaitForSecondsRealtime(5f);
+				// A fresh character can spawn dead (the water at the wreck); a dead body ignores
+				// input and teleports, which reads as a join that cannot move. Do what a player
+				// does: press Respawn - PlayerDying.LocalRespawn, the handler the button reaches,
+				// which round-trips Server.RespawnPlayer. Reflection-only across game builds.
+				bool dead = BenchIsDead();
+				if (dead && respawns < 5)
+				{
+					respawns++;
+					Logger.LogInfo("BENCH_DEAD at " + (Player.LocalPlayer != null ? Player.LocalPlayer.Transform.position.ToString("F1") : "?") +
+						"; respawning (attempt " + respawns + ")");
+					BenchRespawn();
+					yield return new WaitForSecondsRealtime(3f);
+					if (Player.LocalPlayer != null) spawnedAt = Player.LocalPlayer.Transform.position;
+					dead = BenchIsDead();
+				}
+				if (Player.LocalPlayer != null)
+				{
+					furthest = Mathf.Max(furthest, Vector3.Distance(spawnedAt, Player.LocalPlayer.Transform.position));
+				}
 				Logger.LogInfo("BENCH alive players=" + (PlayerManager.Players?.Count ?? -1) +
 					" pos=" + (Player.LocalPlayer != null ? Player.LocalPlayer.Transform.position.ToString("F1") : "?") +
-					" hops=" + _hops);
+					" hops=" + _hops + " dead=" + dead + " furthest=" + furthest.ToString("F1") + "m respawns=" + respawns);
+			}
+		}
+
+		// The client's chat ServerRpc changed shape in game 1.0.10: SendChatMessage(ulong, string)
+		// became SendChatMessage(string, NetworkConnection = null). Call whichever this build has,
+		// by reflection, so the rig binds to neither at compile time.
+		private static void BenchSendChat(ulong id, string line)
+		{
+			object server = Server.Instance;
+			MethodInfo byConnection = AccessTools.Method(typeof(Server), "SendChatMessage", new[] { typeof(string), typeof(FishNet.Connection.NetworkConnection) });
+			if (byConnection != null) { byConnection.Invoke(server, new object[] { line, null }); return; }
+			MethodInfo byId = AccessTools.Method(typeof(Server), "SendChatMessage", new[] { typeof(ulong), typeof(string) });
+			if (byId != null) { byId.Invoke(server, new object[] { id, line }); return; }
+			throw new MissingMethodException("Server", "SendChatMessage");
+		}
+
+		private static Component BenchDying()
+		{
+			try { return Player.LocalPlayer != null ? Player.LocalPlayer.GetComponent("PlayerDying") : null; }
+			catch { return null; }
+		}
+
+		private static bool BenchIsDead()
+		{
+			try
+			{
+				Component dying = BenchDying();
+				PropertyInfo property = dying?.GetType().GetProperty("IsDead");
+				return property != null && (bool)property.GetValue(dying);
+			}
+			catch { return false; }
+		}
+
+		private void BenchRespawn()
+		{
+			try
+			{
+				Component dying = BenchDying();
+				MethodInfo respawn = dying?.GetType().GetMethod("LocalRespawn", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+				if (respawn == null) { Logger.LogWarning("BENCH respawn: LocalRespawn not found"); return; }
+				respawn.Invoke(dying, respawn.GetParameters().Length == 0 ? null : new object[respawn.GetParameters().Length]);
+			}
+			catch (Exception exception)
+			{
+				Logger.LogWarning("BENCH respawn failed: " + exception.GetType().Name + ": " + exception.Message);
 			}
 		}
 
@@ -242,7 +311,7 @@ namespace DriftwoodBenchClient
 					id = Player.LocalPlayer.SteamID;
 					before = Player.LocalPlayer.Transform.position;
 					L?.LogInfo("BENCH_CHAT_SEND from=" + id + " pos=" + before.ToString("F1") + " text=" + line);
-					Server.Instance.SendChatMessage(id, line);
+					BenchSendChat(id, line);
 				}
 				catch (Exception exception)
 				{
