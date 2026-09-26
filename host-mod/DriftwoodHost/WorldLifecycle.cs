@@ -37,10 +37,34 @@ namespace DriftwoodHost
 		// is data loss, not inconvenience. Unity's known-folder lookup ignores the environment, so
 		// the Necesse trick (set APPDATA=) does not work here.
 		//
-		// Both fields are static readonly strings on a static class, initialised in one static
-		// constructor, so rewriting them by reflection before first use is deterministic. BOTH
-		// must be set: _fullLocalSavePath is computed from _saveFolder in that same constructor
-		// and does not follow a later change to it.
+		// Up to 1.0.11 the path fields are static readonly strings set by the type initialiser, so
+		// rewriting them by reflection before first use is deterministic. ALL FOUR are derived
+		// once and none follows a later change to another: set every one that exists. (0.1.7 set
+		// only the first two, so the local save's .tmp/.backup still pointed at LocalLow.)
+		//
+		// GAME 1.0.12 CHANGED THE CONTRACT, and not setting it up right is data loss. Init() now
+		// does three things, all of them wrong on a hosted server:
+		//
+		//   1. calls SteamUser.GetSteamID(). With no Steam client that throws - and 0.1.7 invoked
+		//      Init from here, BEFORE the Steam guards are installed, so every 1.0.12 server
+		//      refused to host;
+		//   2. recomputes _saveFolder as persistentDataPath\Saves\<steamid>\ - the one folder
+		//      every server on the box shares - OVERWRITING this redirect. SaveManager.Awake calls
+		//      Init after the guards are in, so on 1.0.12 the redirect would silently undo itself;
+		//   3. MOVES every *.txt and *.backup it finds in the save root into that subfolder, so
+		//      even pointed at the right root it would carry a customer's world away from where
+		//      the panel's backups, restores and snapshots look for it.
+		//
+		// So this method no longer calls Init at all, and InitPrefix (a Harmony prefix on
+		// SaveSystem.Init) re-applies the redirect and skips the game's body whenever a save root
+		// is configured. The on-disk layout stays flat - <SaveRoot>\<World>.txt - on every build.
+		private static readonly string[] SavePathFields =
+		{
+			"_saveFolder", "_fullLocalSavePath", "_localBackupPath", "_localTempPath"
+		};
+
+		private static Type _saveSystem;
+
 		internal static string RedirectSaveFolder(string absoluteDirectory)
 		{
 			if (string.IsNullOrEmpty(absoluteDirectory)) return null;
@@ -56,22 +80,98 @@ namespace DriftwoodHost
 
 			string normalised = absoluteDirectory.Replace('\\', '/').TrimEnd('/') + "/";
 			Directory.CreateDirectory(normalised);
-			folder.SetValue(null, normalised);
-			localPath.SetValue(null, normalised + "local.txt");
+			string failure = ApplySavePaths(saveSystem, normalised);
+			if (failure != null) return failure;
 
-			// Read back. Never trust the write (playbook 1d, silently-ignored config).
-			string readBack = folder.GetValue(null) as string;
-			if (!string.Equals(readBack, normalised, StringComparison.Ordinal))
+			_saveSystem = saveSystem;
+			EffectiveSaveDirectory = normalised;
+			SaveDirectoryRedirected = true;
+			return null;
+		}
+
+		// Writes every path field this build has, then reads the two that matter back. Never
+		// trust the write (playbook 1d, silently-ignored config).
+		private static string ApplySavePaths(Type saveSystem, string normalisedFolder)
+		{
+			string local = normalisedFolder + "local.txt";
+			foreach (string name in SavePathFields)
+			{
+				// Plain reflection, not AccessTools.Field: the last two fields do not exist before
+				// 1.0.11, and AccessTools logs a warning for every miss, which reads like a fault.
+				FieldInfo field = saveSystem.GetField(name, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+				if (field == null) continue;
+				string value;
+				switch (name)
+				{
+					case "_saveFolder": value = normalisedFolder; break;
+					case "_fullLocalSavePath": value = local; break;
+					case "_localBackupPath": value = local + ".backup"; break;
+					default: value = local + ".tmp"; break;
+				}
+				field.SetValue(null, value);
+			}
+
+			string readBack = AccessTools.Field(saveSystem, "_saveFolder")?.GetValue(null) as string;
+			string localBack = AccessTools.Field(saveSystem, "_fullLocalSavePath")?.GetValue(null) as string;
+			if (!string.Equals(readBack, normalisedFolder, StringComparison.Ordinal) ||
+				!string.Equals(localBack, local, StringComparison.Ordinal))
 			{
 				return "The game's save folder did not accept this server's own save path, so saves would be shared with every other server on this machine.";
 			}
+			return null;
+		}
 
-			// SaveManager.Awake already ran SaveSystem.Init() against the old path; run it again
-			// so the new folder exists before anything writes to it.
-			AccessTools.Method(saveSystem, "Init")?.Invoke(null, null);
+		// Harmony prefix on SaveSystem.Init. With a save root configured, the game's own Init
+		// never runs: it would ask Steam who we are, point the save folder back at the shared
+		// per-user directory and move the world into a per-account subfolder (see above). The
+		// redirect is re-applied instead, so an Init from anywhere - SaveManager.Awake included -
+		// leaves this server's saves exactly where the panel expects them.
+		private static bool InitPrefix()
+		{
+			if (!SaveDirectoryRedirected || _saveSystem == null) return true;
+			try
+			{
+				Directory.CreateDirectory(EffectiveSaveDirectory);
+				string failure = ApplySavePaths(_saveSystem, EffectiveSaveDirectory);
+				if (failure != null) Plugin.Log?.LogError("SaveSystem.Init: " + failure);
+			}
+			catch (Exception exception)
+			{
+				// Never let this escape into SaveManager.Awake. VerifySaveFolder, run before the
+				// world loads, is what turns a redirect that did not hold into a refusal.
+				Plugin.Log?.LogError("SaveSystem.Init: the save redirect could not be re-applied (" +
+					exception.GetType().Name + ": " + exception.Message + ").");
+			}
+			return false;
+		}
 
-			EffectiveSaveDirectory = normalised;
-			SaveDirectoryRedirected = true;
+		internal static IEnumerable<PatchTarget> Targets()
+		{
+			yield return new PatchTarget
+			{
+				TypeName = "SaveSystem",
+				MethodName = "Init",
+				Kind = PatchKind.Custom,
+				// Required exactly when a save root is configured: then the game's Init would undo
+				// the redirect (1.0.12+). A self-hoster with no save root keeps the game's own Init.
+				Necessity = SaveDirectoryRedirected ? PatchNecessity.Required : PatchNecessity.Optional,
+				Prefix = AccessTools.Method(typeof(WorldLifecycle), nameof(InitPrefix)),
+				Why = "Game 1.0.12 made SaveSystem.Init ask Steam for the account id, repoint the save folder at the per-user directory every server on the box shares, and move world files into a per-account subfolder."
+			};
+		}
+
+		// The last word before a world is loaded or created: the game's save folder must still be
+		// this server's own. Anything the game ran between the redirect and now (SaveManager.Awake
+		// on 1.0.12 is the known one) had its chance to move it. Returns null when it held.
+		internal static string VerifySaveFolder()
+		{
+			if (!SaveDirectoryRedirected || _saveSystem == null) return null;
+			string current = AccessTools.Field(_saveSystem, "_saveFolder")?.GetValue(null) as string;
+			if (!string.Equals(current, EffectiveSaveDirectory, StringComparison.Ordinal))
+			{
+				return "The game moved its save folder away from this server's own (" + (current ?? "unset") +
+					"), so saves would be shared with every other server on this machine.";
+			}
 			return null;
 		}
 
@@ -173,12 +273,27 @@ namespace DriftwoodHost
 				//
 				// isPublic (added in 1.0.5) is only ever read as "UseSteam && IsPublic", so with
 				// useSteam false it is inert either way; false is the honest value.
-				create.Invoke(null, BuildArguments(create, new Dictionary<string, object>
+				//
+				// difficulty (added in 1.0.9) is enum Difficulty { Easy, Default, Hard }. Unknown to
+				// 0.1.7, it was passed its zero value - EASY - so every world this host created on
+				// 1.0.9+ started on Easy (creatures 25% less health, half the damage) instead of the
+				// game's own default. Pass the game's "Default" member by NAME, so a reordered enum
+				// cannot move it. Worlds already created keep the difficulty saved in them.
+				Dictionary<string, object> createArguments = new Dictionary<string, object>
 				{
 					{ "serverName", worldName },
 					{ "useSteam", false },
 					{ "isPublic", false }
-				}));
+				};
+				foreach (ParameterInfo parameter in create.GetParameters())
+				{
+					if (parameter.Name != "difficulty" || !parameter.ParameterType.IsEnum) continue;
+					if (Enum.IsDefined(parameter.ParameterType, "Default"))
+					{
+						createArguments["difficulty"] = Enum.Parse(parameter.ParameterType, "Default");
+					}
+				}
+				create.Invoke(null, BuildArguments(create, createArguments));
 				CreatedNewWorld = true;
 			}
 

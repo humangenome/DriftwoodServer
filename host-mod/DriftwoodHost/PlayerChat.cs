@@ -72,15 +72,36 @@ namespace DriftwoodHost
 				: "off (the game build no longer has the chat RPC this hooks; ordinary chat is unaffected)";
 		}
 
+		// THE RPC CHANGED SHAPE IN GAME 1.0.10, and matching it by its full generated name is
+		// what silently switched this feature off on every server since (the name carries a
+		// hash of the signature, ___3264264606 up to 1.0.9, ___2943234052 from 1.0.10):
+		//
+		//   up to 1.0.9   RpcLogic(ulong from, string message)             the client sends its id
+		//   1.0.10+       RpcLogic(string message, NetworkConnection conn) the server works it out
+		//
+		// and in the 1.0.10+ body the server works it out as SteamUser.GetSteamID() whenever the
+		// session is not using Steam - which on a dedicated server is always, and which our
+		// GetSteamID guard answers with the server's own identity. So every player's chat line
+		// has been relayed under the SERVER's id: the crew saw each other's messages under the
+		// server's name. The 1.0.10+ prefix fixes that too - ordinary chat is relayed under the
+		// sender's own id, resolved from the connection the line arrived on.
+		//
+		// Both methods are found by name PREFIX and the handler is chosen by the signature the
+		// game actually ships, so the next hash move changes nothing here.
+		internal const string ReaderPrefixName = "RpcReader___SendChatMessage___";
+		internal const string LogicPrefixName = "RpcLogic___SendChatMessage___";
+
 		internal static IEnumerable<PatchTarget> Targets()
 		{
+			bool connectionShape = LogicTakesConnection();
 			// Both members stand or fall together: without the reader the sender would have to
 			// be taken from the client's own claim, and a chat command that acts on a player is
 			// worth having only with the transport-derived identity everything else keys on.
 			yield return new PatchTarget
 			{
 				TypeName = "Server",
-				MethodName = "RpcReader___SendChatMessage___3264264606",
+				MethodName = ReaderPrefixName + "*",
+				MethodNamePrefix = ReaderPrefixName,
 				Kind = PatchKind.Custom,
 				Necessity = PatchNecessity.Optional,
 				Group = GroupName,
@@ -91,14 +112,41 @@ namespace DriftwoodHost
 			yield return new PatchTarget
 			{
 				TypeName = "Server",
-				MethodName = "RpcLogic___SendChatMessage___3264264606",
-				Parameters = new[] { typeof(ulong), typeof(string) },
+				MethodName = LogicPrefixName + "*",
+				MethodNamePrefix = LogicPrefixName,
 				Kind = PatchKind.Custom,
 				Necessity = PatchNecessity.Optional,
 				Group = GroupName,
-				Prefix = AccessTools.Method(typeof(PlayerChat), nameof(LogicPrefix)),
-				Why = "Player chat commands (!stuck, !playtime, !top, !help). Ordinary chat passes through untouched."
+				Prefix = connectionShape
+					? AccessTools.Method(typeof(PlayerChat), nameof(LogicPrefixByConnection))
+					: AccessTools.Method(typeof(PlayerChat), nameof(LogicPrefix)),
+				Why = connectionShape
+					? "Player chat commands, and ordinary chat relayed under the sender's own id instead of the server's (game 1.0.10+)."
+					: "Player chat commands (!stuck, !playtime, !top, !help). Ordinary chat passes through untouched."
 			};
+		}
+
+		// True when the shipped chat logic takes (string message, NetworkConnection sender).
+		private static bool LogicTakesConnection()
+		{
+			try
+			{
+				Type server = AccessTools.TypeByName("Server");
+				if (server == null) return false;
+				foreach (System.Reflection.MethodInfo method in server.GetMethods(
+					System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public |
+					System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.DeclaredOnly))
+				{
+					if (!method.Name.StartsWith(LogicPrefixName, StringComparison.Ordinal)) continue;
+					System.Reflection.ParameterInfo[] parameters = method.GetParameters();
+					return parameters.Length == 2 && parameters[0].ParameterType == typeof(string) &&
+						typeof(NetworkConnection).IsAssignableFrom(parameters[1].ParameterType);
+				}
+			}
+			catch
+			{
+			}
+			return false;
 		}
 
 		// ------------------------------------------------------------------
@@ -140,6 +188,43 @@ namespace DriftwoodHost
 					_warnedOnce = true;
 					Plugin.Log?.LogWarning("A player chat command failed (" + exception.GetType().Name + ": " +
 						exception.Message + "). The line was passed through as ordinary chat. Further failures are not logged.");
+				}
+				return true;
+			}
+		}
+
+		// Game 1.0.10+: the logic receives the connection itself. A command is handled exactly as
+		// before. Ordinary chat is relayed by us under the sender's own id and the game's body is
+		// skipped, because that body would stamp the line with the server's id (see Targets). If
+		// the sender cannot be resolved the game's own relay runs, unchanged.
+		private static bool LogicPrefixByConnection(string __0, NetworkConnection __1)
+		{
+			try
+			{
+				if (!Enabled) return true;
+				if (__1 != null) _currentSender = __1;
+				string verb, args;
+				if (PlayerCommands.TryParse(__0, out verb, out args))
+				{
+					Handle(0UL, verb, args);
+					return false;
+				}
+				OwnerActions.Found sender = ResolveSender(0UL);
+				if (sender == null) return true;
+				object chat = AccessTools.Field(AccessTools.TypeByName("OnlineChatManager"), "Instance")?.GetValue(null);
+				System.Reflection.MethodInfo relay = chat == null ? null :
+					AccessTools.Method(chat.GetType(), "SendChatMessage", new[] { typeof(ulong), typeof(string) });
+				if (relay == null) return true;
+				relay.Invoke(chat, new object[] { sender.SteamId, __0 });
+				return false;
+			}
+			catch (Exception exception)
+			{
+				if (!_warnedOnce)
+				{
+					_warnedOnce = true;
+					Plugin.Log?.LogWarning("A player chat line could not be handled (" + exception.GetType().Name + ": " +
+						exception.Message + "). It was passed to the game's own relay. Further failures are not logged.");
 				}
 				return true;
 			}

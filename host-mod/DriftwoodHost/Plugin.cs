@@ -24,7 +24,7 @@ namespace DriftwoodHost
 	public class Plugin : BaseUnityPlugin
 	{
 		public const string Guid = "com.humangenome.driftwood.host";
-		public const string Version = "0.1.7";
+		public const string Version = "0.1.8";
 
 		internal static ManualLogSource Log;
 
@@ -252,6 +252,7 @@ namespace DriftwoodHost
 			// names everything that moved.
 			List<PatchTarget> targets = new List<PatchTarget>();
 			targets.AddRange(SteamGuards.Targets());
+			targets.AddRange(WorldLifecycle.Targets());
 			targets.AddRange(HeadlessPatches.Targets());
 			targets.AddRange(GhostHost.Targets());
 			targets.AddRange(SpawnIdentity.Targets());
@@ -407,6 +408,16 @@ namespace DriftwoodHost
 			if (_transport == null)
 			{
 				Refuse("The game returned no direct-UDP transport, so this server could not start listening.");
+				yield break;
+			}
+
+			// The save folder must still be this server's own before a world is read or created.
+			// Game 1.0.12's SaveManager.Awake runs SaveSystem.Init after boot; the Init prefix
+			// keeps the redirect, and this is the check that it did.
+			string saveFolderFailure = WorldLifecycle.VerifySaveFolder();
+			if (saveFolderFailure != null)
+			{
+				Refuse(saveFolderFailure);
 				yield break;
 			}
 

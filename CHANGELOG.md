@@ -2,6 +2,38 @@
 
 All notable changes to DriftwoodServer are recorded here.
 
+## [0.1.8] - 2026-09-25
+
+### Fixed
+
+- **Game 1.0.12 would not host at all.** 1.0.12 made `SaveSystem.Init` ask Steam for the
+  account id (`SteamUser.GetSteamID`) so saves can live in a per-account folder for Steam
+  Cloud. The host called `Init` itself while redirecting the save folder, before its Steam
+  guards were installed, so on a server with no Steam client the call threw and every boot
+  refused with `TargetInvocationException`. The same `Init` would also have undone the
+  redirect a moment later: on 1.0.12 it recomputes the save folder as the per-user
+  directory every server on a machine shares, and on first run it MOVES every world file it
+  finds into a `<steamid>` subfolder. The host now sets every save-path field the build has
+  and never lets the game's `Init` run while a save root is configured: a Harmony prefix
+  re-applies the redirect and skips the body, and the save folder is read back once more
+  right before a world is loaded or created, refusing to host if anything moved it. The
+  on-disk layout stays flat (`<SaveRoot>/<World>.txt`) on every build, so an existing world
+  loads unchanged. Also fixes the local save's `.tmp`/`.backup` paths, which 0.1.7 left
+  pointing at the shared per-user folder on 1.0.11.
+- **Player chat commands had been off since game 1.0.10, and every player's chat line was
+  relayed under the server's name.** 1.0.10 changed the chat ServerRpc from
+  `(ulong from, string message)` to `(string message, NetworkConnection sender)`, which
+  renamed its generated methods, so the hook no longer matched and the feature stood down.
+  The new body also stamps the line with `SteamUser.GetSteamID()` whenever the session is not
+  using Steam - on a dedicated server that is the server's own identity. The hook now finds
+  the RPC by name prefix, picks its handler from the signature the game actually ships, and
+  on 1.0.10+ relays ordinary chat under the sender's own id, resolved from the connection it
+  arrived on. `!help`, `!stuck`, `!playtime` and `!top` work again.
+- **New worlds were created on Easy.** 1.0.9 added a `difficulty` parameter to
+  `SaveManager.CreateServer` (`enum Difficulty { Easy, Default, Hard }`); the host passed its
+  zero value. A new world now gets the game's own `Default`, chosen by name. Existing worlds
+  keep the difficulty stored in them.
+
 ## [0.1.7] - 2026-08-26
 
 ### Fixed
