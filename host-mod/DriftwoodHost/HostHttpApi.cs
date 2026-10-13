@@ -864,6 +864,7 @@ namespace DriftwoodHost
 				.Add("islandUnlocked", worldRunning ? _readiness.IslandUnlocked : 0)
 				.Add("islandChanging", worldRunning && _readiness.IslandChanging)
 				.Add("wallet", worldRunning ? _readiness.Wallet : -1L)
+				.Add("walletEuro", worldRunning ? _readiness.WalletEuro : -1L)
 				.AddRaw("islandCentre", (worldRunning && _readiness.IslandCentreKnown)
 					? "[" + _readiness.IslandCentreX.ToString("0.##", CultureInfo.InvariantCulture) + "," + _readiness.IslandCentreZ.ToString("0.##", CultureInfo.InvariantCulture) + "]"
 					: "null")

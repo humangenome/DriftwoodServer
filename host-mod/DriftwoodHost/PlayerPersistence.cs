@@ -24,7 +24,7 @@ namespace DriftwoodHost
 	//
 	//   - everything a CONNECTED player did since their last disconnect, on every
 	//     restart - the panel's own restart flow saves first, and that save cannot
-	//     see them (ticket 765633: "came back from our restart as a different
+	//     see them (a player reported coming "back from our restart as a different
 	//     character" - half of that was this, the other half is the identity
 	//     keying in SpawnIdentity.cs);
 	//   - everyone aboard, on a crash - the disconnect save never runs

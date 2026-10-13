@@ -75,9 +75,11 @@ namespace DriftwoodHost
 					return "the world is not running, so there is no wallet to change.";
 				// The Player argument only places the coin sound; the game's audio path is
 				// null-safe, so an empty server just changes the number silently.
+				// Through GameCompat: 1.1.0 added a currency parameter to both calls, and a direct
+				// call compiled against the old signature cannot run on the new build at all.
 				Player nearest = FirstConnectedPlayer();
-				if (add) MoneyManager.AddMoney(amount, nearest);
-				else MoneyManager.RemoveMoney(amount, nearest);
+				string refused = GameCompat.ChangeMoney(amount, add, nearest);
+				if (refused != null) return refused;
 				balance = manager._money.Value;
 				return null;
 			}
@@ -125,6 +127,7 @@ namespace DriftwoodHost
 				if (IslandManager.IsLoading)
 					return "an island change is already in progress - wait for it to finish.";
 				OnlineIslandManager.TpToNextIsland(backwards);
+				GameCompat.ArmIslandTeleport();
 				newIsland = manager._curIsland.Value + 1;
 				return null;
 			}
@@ -159,6 +162,7 @@ namespace DriftwoodHost
 					unlockedNew = true;
 				}
 				OnlineIslandManager.TpToSpecificIsland(index);
+				GameCompat.ArmIslandTeleport();
 				return null;
 			}
 			catch (Exception exception)
@@ -240,12 +244,11 @@ namespace DriftwoodHost
 			}
 		}
 
-		// The number of islands a crew can actually stand on. IslandManager counts scenes;
-		// build index 0 is the base scene and the game's own wrap-around in NextIslandInBuild
-		// treats TotalIslands - 1 as one past the last playable island.
+		// The number of islands a crew can actually stand on, the way the game's own
+		// next-island command counts them on this build (GameCompat.PlayableIslands).
 		private static int PlayableIslands()
 		{
-			return Math.Max(0, IslandManager.TotalIslands - 1);
+			return GameCompat.PlayableIslands();
 		}
 
 		private static Player FirstConnectedPlayer()

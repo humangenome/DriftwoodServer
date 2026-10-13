@@ -95,6 +95,8 @@ namespace DriftwoodHost
 		public int IslandUnlocked;
 		public bool IslandChanging;
 		public long Wallet = -1;
+		// Euros (game 1.1.0+). -1 when the world is down or this build has no second currency.
+		public long WalletEuro = -1;
 		public bool IslandCentreKnown;
 		public double IslandCentreX;
 		public double IslandCentreZ;

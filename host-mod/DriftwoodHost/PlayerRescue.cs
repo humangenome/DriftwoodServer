@@ -22,8 +22,9 @@ namespace DriftwoodHost
 	// carries it out. A modified client could ignore the order, but a modified client can
 	// already fly - movement is client-owned with or without us.
 	//
-	// WHERE "SHORE" IS: the island's authored spawn transform, SpawnManager.PlayerSpawnPos /
-	// PlayerSpawnRot, read on this server from the loaded island scene. It is the same point
+	// WHERE "SHORE" IS: the island's authored spawn transform, read on this server from the
+	// loaded island scene through GameCompat.TryPlayerSpawn (SpawnManager.PlayerSpawnPos/Rot up
+	// to 1.0.12; GetPlayerSpawnPos/Rot from 1.1.0, which also knows the mini islands). It is the same point
 	// the game uses for a fresh spawn (PlayerMovement.TeleportToLand), for a respawn after
 	// death (PlayerDying.ResurrectEffect) and for arrival on a new island - the shoreline by
 	// the wreck. Nothing here invents a position.
@@ -58,8 +59,11 @@ namespace DriftwoodHost
 					return "the island just changed - try again in a few seconds.";
 				if (Island.CurIsland == null)
 					return "no island is loaded right now.";
-				Vector3 spawn = SpawnManager.PlayerSpawnPos;
-				if (spawn == Vector3.zero)
+				Vector3 spawn;
+				float rotation;
+				Vector3 standing = Vector3.zero;
+				try { standing = player.Transform.position; } catch { }
+				if (!GameCompat.TryPlayerSpawn(standing, out spawn, out rotation) || spawn == Vector3.zero)
 					return "this island has no spawn point to send you to.";
 
 				// A downed player already has a way back to shore - the game's own respawn -
@@ -96,7 +100,6 @@ namespace DriftwoodHost
 						return "you are driving the boat - step away from the wheel first.";
 				}
 
-				float rotation = SpawnManager.PlayerSpawnRot;
 				where = "island spawn (" + spawn.x.ToString("0.#") + ", " + spawn.y.ToString("0.#") + ", " + spawn.z.ToString("0.#") + ")";
 				player.RPCTeleport(owner, spawn, rotation);
 				return null;

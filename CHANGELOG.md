@@ -2,6 +2,45 @@
 
 All notable changes to DriftwoodServer are recorded here.
 
+## [0.1.9] - 2026-10-12
+
+### Fixed
+
+- **Game 1.1.0 and later never finished starting.** The Islet update turned
+  `IslandManager.TotalIslands` from a field into a property. The host read it inside the
+  startup loop, so on 1.1.x that loop died with `MissingFieldException` right after the world
+  loaded: the port was open, `/health` answered 503 for ever and the readiness file stayed on
+  "Loading the world". Every member that differs between supported builds (the island count,
+  the island spawn point, `AddMoney`/`RemoveMoney`, which gained a currency parameter) is now
+  reached through one compatibility layer that knows the old and the new shape, so the same DLL
+  hosts 1.0.12 and 1.1.3.
+- **Euro purchases were refused and euros were never saved.** 1.1.0 added a second currency
+  held exactly like dollars: a SyncVar the server owns and a static only client code updates.
+  The game's purchase gate and its world save read the static, which on a dedicated server
+  never moves. The host now mirrors euros onto it alongside dollars. `/api/v1/status` reports
+  the euro balance as `walletEuro` (`-1` on builds without euros).
+- **Owner island commands left the crew in open water on 1.1.x.** 1.1.0 only moves players to
+  the new island when the server has a local player, which a dedicated server does not. The
+  host now finishes that step itself once the new island has loaded, with the game's own
+  teleport and the game's own spawn points. The same gap made a whole-crew wipe end in a
+  `NullReferenceException` with the boat left at sea; the host now moves the boat home there
+  too.
+- **`!stuck` on 1.1.x** uses the game's new spawn lookup, which also knows the mini islands.
+- **The island count** on `/status`, in Discord alerts and in the `island` command now counts
+  only the islands the game itself sails between on each build (1.1.x added mini islands to
+  the same scene list).
+
+### Added
+
+- `tools/ci/check-game-build.sh` compiles the host against each game build you give it and
+  resolves every member the DLL binds against every one of them (`tools/memberdiff`). Run it
+  before pinning a new game build.
+
+### Changed
+
+- `-p:ManagedDir=<game>/How to Fish_Data/Managed` now actually selects the game assemblies the
+  host compiles against. The local `refs/` folder used to win over it without a word.
+
 ## [0.1.8] - 2026-09-25
 
 ### Fixed

@@ -38,8 +38,15 @@ namespace DriftwoodHost
 	// It fails in the permissive direction too: a world whose save happens to hold a large
 	// figure lets every purchase under it through for ever, no matter what the crew has spent.
 	//
-	// MEASURED on a customer server 2026-08-25 (game 1.0.9, host 0.1.5, ticket 765633):
+	// MEASURED on a customer server 2026-08-25 (game 1.0.9, host 0.1.5):
 	// _money.Value = 3 while the game's own SaveServer wrote "Money":0 into the world file.
+	//
+	// GAME 1.1.0 ADDED A SECOND CURRENCY WITH THE SAME DEFECT. Euros are held exactly like
+	// dollars - MoneyManager._euro (the SyncVar) and MoneyManager.Euro (a static only client
+	// code writes) - and CanAfford(cost, Currency.Euro) reads the static, as does the save. So
+	// every euro purchase (euro items, bullet, quiver and wishbone upgrades) was refused on a
+	// dedicated server and euros never persisted. Both pairs are mirrored here; the euro pair is
+	// resolved by reflection because it does not exist before 1.1.0, and its absence is normal.
 	//
 	// The fix is to keep the static in step with the SyncVar on the server - exactly what the
 	// client half of the game does for itself. Nothing else changes: the SyncVar is still the
@@ -54,6 +61,11 @@ namespace DriftwoodHost
 		private static MethodInfo _setter;
 		private static bool _resolved;
 		private static bool _warned;
+
+		// Game 1.1.0+: the euro SyncVar and its client-side static. Null on older builds.
+		private static FieldInfo _euroSyncVar;
+		private static PropertyInfo _euroValue;
+		private static MethodInfo _euroSetter;
 
 		internal static IEnumerable<PatchTarget> Targets()
 		{
@@ -113,6 +125,11 @@ namespace DriftwoodHost
 				MethodInfo setter = Setter();
 				if (setter == null) return;
 				setter.Invoke(null, new object[] { manager._money.Value });
+				if (_euroSetter != null)
+				{
+					object syncVar = _euroSyncVar.GetValue(manager);
+					if (syncVar != null) _euroSetter.Invoke(null, new object[] { _euroValue.GetValue(syncVar, null) });
+				}
 			}
 			catch (Exception exception)
 			{
@@ -133,7 +150,36 @@ namespace DriftwoodHost
 			{
 				Plugin.Log?.LogWarning("MoneyManager.Money has no setter in this game build, so the server's purchase gate cannot be kept in step with the crew's real balance.");
 			}
+			ResolveEuro();
 			return _setter;
+		}
+
+		// The real euro balance (the SyncVar), or -1 on a build without euros.
+		internal static long EuroBalance(MoneyManager manager)
+		{
+			Setter();
+			if (_euroSyncVar == null || manager == null) return -1;
+			object syncVar = _euroSyncVar.GetValue(manager);
+			return syncVar == null ? -1 : (int)_euroValue.GetValue(syncVar, null);
+		}
+
+		// Euros: both halves or neither. A build with the SyncVar but no settable static (or the
+		// reverse) is a shape this code has never seen, so it says so once and mirrors dollars only.
+		private static void ResolveEuro()
+		{
+			FieldInfo syncVar = GameCompat.QuietField(typeof(MoneyManager), "_euro");
+			MethodInfo setter = GameCompat.QuietProperty(typeof(MoneyManager), "Euro")?.GetSetMethod(true);
+			if (syncVar == null && setter == null) return;
+			PropertyInfo value = syncVar == null ? null : GameCompat.QuietProperty(syncVar.FieldType, "Value");
+			if (syncVar == null || setter == null || value == null || value.PropertyType != typeof(int))
+			{
+				Plugin.Log?.LogWarning("This game build has a second currency in a shape the host does not recognise, so euro purchases on this server may be refused even when the crew can afford them.");
+				return;
+			}
+			_euroSyncVar = syncVar;
+			_euroValue = value;
+			_euroSetter = setter;
+			Plugin.Log?.LogInfo("Second currency found (euros): mirrored onto the purchase gate alongside dollars.");
 		}
 	}
 }

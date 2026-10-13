@@ -24,7 +24,7 @@ namespace DriftwoodHost
 	public class Plugin : BaseUnityPlugin
 	{
 		public const string Guid = "com.humangenome.driftwood.host";
-		public const string Version = "0.1.8";
+		public const string Version = "0.1.9";
 
 		internal static ManualLogSource Log;
 
@@ -258,6 +258,7 @@ namespace DriftwoodHost
 			targets.AddRange(SpawnIdentity.Targets());
 			targets.AddRange(MoneyMirror.Targets());
 			targets.AddRange(PlayerPersistence.Targets());
+			targets.AddRange(GameCompat.Targets());
 			targets.Add(SlotGuard.RefusalCounterTarget());
 			if (_config.PlayerChatCommands) targets.AddRange(PlayerChat.Targets());
 			if (_config.Leaderboard && CatchLedger.Enabled) targets.AddRange(CatchHooks.Targets());
@@ -671,6 +672,8 @@ namespace DriftwoodHost
 				}
 				PlayerDirectory.Observe(rosterIds, rosterNames, rosterConnections, rosterPositions);
 				SampleWorld();
+				// Finishes an owner island change the game leaves to a local player (1.1.0+).
+				GameCompat.ServiceIslandTeleport();
 				// Hand the connected ids to the name resolver (a set-add under a lock, nothing
 				// slower - the actual HTTP happens on its own thread), and sweep the block list.
 				// Both live in the sampler because it is the one recurring main-thread walk that
@@ -688,7 +691,7 @@ namespace DriftwoodHost
 				if (_readiness.WorldRunning && islandManager != null)
 				{
 					DiscordAlerts.ObserveIsland(islandManager._curIsland.Value + 1,
-						Math.Max(0, IslandManager.TotalIslands - 1));
+						GameCompat.PlayableIslands());
 				}
 				_readiness.DiscordAlertsState = DiscordAlerts.State;
 				// The leaderboard's playtime column is measured by THIS clock, on this walk: a
@@ -755,12 +758,13 @@ namespace DriftwoodHost
 				_readiness.IslandUnlocked = 0;
 				_readiness.IslandChanging = false;
 				_readiness.Wallet = -1;
+				_readiness.WalletEuro = -1;
 				_readiness.IslandCentreKnown = false;
 				return;
 			}
 			try
 			{
-				int playable = Math.Max(0, IslandManager.TotalIslands - 1);
+				int playable = GameCompat.PlayableIslands();
 				_readiness.IslandTotal = playable;
 				_readiness.IslandChanging = IslandManager.IsLoading;
 				OnlineIslandManager islands = OnlineIslandManager.Instance;
@@ -791,6 +795,7 @@ namespace DriftwoodHost
 			{
 				MoneyManager money = MoneyManager.Instance;
 				_readiness.Wallet = (money != null && money.IsServerInitialized) ? money._money.Value : -1;
+				_readiness.WalletEuro = (money != null && money.IsServerInitialized) ? MoneyMirror.EuroBalance(money) : -1;
 			}
 			catch (Exception exception)
 			{
