@@ -18,7 +18,11 @@
          build resolves them at runtime and we must not rewrite its bindings.
          CS0436: the game's own types collide with framework facades in the ref set. -->
     <NoWarn>$(NoWarn);MSB3277;CS0436</NoWarn>
-    <AssemblySearchPaths>$(AssemblySearchPaths);$(ManagedDir)</AssemblySearchPaths>
+    <!-- {HintPathFromItem} FIRST. The SDK's default list starts with {CandidateAssemblyFiles},
+         which includes every .dll inside this project folder, so the local refs/ copy used to win
+         over the HintPath and -p:ManagedDir=<a live install> was silently ignored: 0.1.8 was
+         compiled against a 1.0.5-era refs/ while its notes said 1.0.12. -->
+    <AssemblySearchPaths>{HintPathFromItem};$(AssemblySearchPaths);$(ManagedDir)</AssemblySearchPaths>
   </PropertyGroup>
 
   <PropertyGroup>
