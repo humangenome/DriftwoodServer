@@ -5,26 +5,18 @@
 [![Platform](https://img.shields.io/badge/Platform-Windows_x64-blue.svg)](#what-you-need)
 [![Game](https://img.shields.io/badge/Game-How_to_Fish-4aa3df.svg)](https://store.steampowered.com/app/4001890/)
 
-DriftwoodServer runs an always-on dedicated server for
-[How to Fish](https://store.steampowered.com/app/4001890/). The game does not ship one; this
-package adds one. The world lives on the server and keeps going whether or not anyone is online,
-and everyone joins it with the [Driftwood app](https://github.com/HumanGenome/Driftwood), you
-included.
+[How to Fish](https://store.steampowered.com/app/4001890/) has no dedicated server. Its co-op runs in a Steam lobby hosted from one player's game. DriftwoodServer adds a How to Fish dedicated server: it runs the game headless on a Windows machine with a public IP and port, and players connect to it by address with the [Driftwood app](https://github.com/HumanGenome/Driftwood), the host included.
 
-Driftwood is third-party software and is not affiliated with or endorsed by Dazed Games. Every
-player needs their own Steam copy of the game.
+Driftwood is third-party software and is not affiliated with or endorsed by Dazed Games. Every player needs their own Steam copy of the game.
 
-The rest of this page sets one up on a Windows machine you control, start to finish. If you would
-rather rent one,
-[SurvivalServers.com](https://www.survivalservers.com/services/game_servers/how_to_fish/?utm_source=github&utm_medium=readme&utm_campaign=driftwoodserver)
-runs How to Fish servers with Driftwood installed and kept on the latest release. What changed in
-each release is in [CHANGELOG.md](CHANGELOG.md).
+The rest of this page sets one up on a Windows machine you control, start to finish. If you would rather rent one, [SurvivalServers.com](https://www.survivalservers.com/services/game_servers/how_to_fish/?utm_source=github&utm_medium=readme&utm_campaign=driftwoodserver) runs How to Fish servers with Driftwood installed. What changed in each release is in [CHANGELOG.md](CHANGELOG.md).
 
 ## What you need
 
 - Windows 10 / 11 / Server, x64
 - Your own Steam copy of How to Fish, installed. The server runs the game's files, and this repo
-  ships none of them.
+  ships none of them. Release 0.1.9 hosts game 1.1.x (tested on 1.1.3) and 1.0.12; older
+  releases do not start on 1.1.x.
 - [Git](https://git-scm.com/downloads) and the
   [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0), both free, used once in step 4
 - Two open ports: one UDP port for the game, plus the TCP port directly above it
