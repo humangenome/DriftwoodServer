@@ -29,8 +29,21 @@ not_shipped=(
 )
 
 # --- forward ---------------------------------------------------------------------------------
+# The host mod compiles against the game's own assemblies, which are never committed, so CI cannot
+# build it (checks.yml says so) and its DLL can never exist there. Checking for it in CI failed every
+# run on master from 2026-08-26 to 2026-10-12, which taught nobody anything. In CI it is reported as
+# not checked here; scripts/package-server-overlay.sh asserts it by name before anything is zipped,
+# which is the place a missing host DLL would actually ship from.
 for relative in "${server_bundle[@]}"; do
-  [ -f "$root/$relative" ] || bad "declared server-bundle file is missing after the build: $relative"
+  if [ -f "$root/$relative" ]; then continue; fi
+  case "$relative" in
+    host-mod/*)
+      if [ -n "${CI:-}" ]; then
+        printf 'not checked in CI (needs the game assemblies; the packager asserts it): %s\n' "$relative"
+        continue
+      fi ;;
+  esac
+  bad "declared server-bundle file is missing after the build: $relative"
 done
 
 # --- reverse ---------------------------------------------------------------------------------
