@@ -36,6 +36,9 @@ namespace DriftwoodBenchClient
 		private ConfigEntry<string> _chatLines;
 		private ConfigEntry<float> _chatStart;
 		private ConfigEntry<float> _chatGap;
+		private ConfigEntry<string> _steamId;
+		private ConfigEntry<string> _personaName;
+		private ConfigEntry<string> _joinVia;
 
 		private FieldInfo _moveInputField;
 		private FieldInfo _sprintInputField;
@@ -66,6 +69,25 @@ namespace DriftwoodBenchClient
 			_chatLines = Config.Bind("Bench", "ChatLines", "", "Semicolon-separated chat lines to send once spawned. Empty = send nothing.");
 			_chatStart = Config.Bind("Bench", "ChatStartSeconds", 10f, "Seconds after spawn before the first chat line.");
 			_chatGap = Config.Bind("Bench", "ChatGapSeconds", 6f, "Seconds between chat lines. Keep above the server's per-player reply gap.");
+
+			// The identity-claim rig (DriftwoodConnect 0.1.4+, loaded beside this plugin). A headless
+			// client has no Steam, so the Steam guard below answers the host placeholder - which the
+			// claim correctly refuses to send. SteamId gives this process a real account id to answer
+			// with instead, so the shipped DriftwoodConnect reads it through the same
+			// SteamUser.GetSteamID call it makes on a retail client. Empty = the old behaviour.
+			_steamId = Config.Bind("Bench", "SteamId", "", "SteamID64 this headless client reports as signed in. Empty = the host placeholder (no claim).");
+			_personaName = Config.Bind("Bench", "PersonaName", "", "Steam persona name this headless client reports. Empty = unchanged.");
+			// "direct" dials the transport itself (the original rig). "menu" types the address into the
+			// game's own Join Game lobby box and presses its Join button, which is DriftwoodConnect's
+			// menu-join path end to end.
+			_joinVia = Config.Bind("Bench", "JoinVia", "direct", "direct = dial the transport; menu = type the address into the Join Game box and press Join (needs DriftwoodConnect).");
+			ulong benchId;
+			if (ulong.TryParse((_steamId.Value ?? "").Trim(), out benchId) && benchId != 0UL)
+			{
+				SteamGuards.CurrentIdentity = () => benchId;
+				Logger.LogInfo("BENCH_STEAMID " + benchId);
+			}
+			if (!string.IsNullOrWhiteSpace(_personaName.Value)) DriftwoodIdentity.HostDisplayName = _personaName.Value.Trim();
 
 			// The client is headless too, so it needs the same guards. In particular
 			// SteamFriends.GetPersonaName / GetFriendPersonaName: without them Player.OnStartClient
@@ -134,6 +156,15 @@ namespace DriftwoodBenchClient
 		{
 			yield return new WaitForSecondsRealtime(_startDelay.Value);
 
+			if (string.Equals((_joinVia.Value ?? "").Trim(), "menu", StringComparison.OrdinalIgnoreCase))
+			{
+				if (!MenuJoin()) yield break;
+				yield return new WaitForSecondsRealtime(1f);
+				MainMenuManager.InstantCrash();
+				yield return WaitForSpawnThenWalk();
+				yield break;
+			}
+
 			ConnectionManager connectionManager = ConnectionManager.Instance;
 			Multipass multipass =
 				AccessTools.Field(typeof(ConnectionManager), "_multipass")?.GetValue(connectionManager) as Multipass;
@@ -158,6 +189,33 @@ namespace DriftwoodBenchClient
 			yield return new WaitForSecondsRealtime(1f);
 			MainMenuManager.InstantCrash();
 
+			yield return WaitForSpawnThenWalk();
+		}
+
+		// The Join Game screen, used the way a player uses it: the address goes into the real
+		// lobby-ID box (its own change handler runs) and the real Join button's onClick fires,
+		// so the game's ButtonManager.JoinByIDButton and whatever DriftwoodConnect hangs on it
+		// run exactly as on a retail client.
+		private bool MenuJoin()
+		{
+			ButtonManager menu = UnityEngine.Object.FindObjectOfType<ButtonManager>(true);
+			if (menu == null) { Logger.LogError("BENCH_MENU no ButtonManager in the scene"); return false; }
+			var field = AccessTools.Field(typeof(ButtonManager), "_lobbyIdInputField")?.GetValue(menu) as TMPro.TMP_InputField;
+			var button = AccessTools.Field(typeof(ButtonManager), "_joinByIDButton")?.GetValue(menu) as UnityEngine.UI.Button;
+			if (field == null || button == null) { Logger.LogError("BENCH_MENU lobby box or Join button missing"); return false; }
+
+			string address = _address.Value + ":" + _port.Value;
+			field.text = address;
+			menu.OnLobbyIDInputFieldChange();
+			Logger.LogInfo("BENCH_MENU typed '" + field.text + "' joinEnabled=" + button.enabled + " interactable=" + button.interactable);
+			if (!button.enabled) { Logger.LogError("BENCH_MENU the Join button stayed disabled for an address"); return false; }
+			button.onClick.Invoke();
+			Logger.LogInfo("BENCH_MENU pressed Join");
+			return true;
+		}
+
+		private IEnumerator WaitForSpawnThenWalk()
+		{
 			float deadline = Time.realtimeSinceStartup + 180f;
 			while (Player.LocalPlayer == null)
 			{
