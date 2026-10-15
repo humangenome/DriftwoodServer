@@ -2,6 +2,18 @@
 
 All notable changes to DriftwoodServer are recorded here.
 
+## [0.1.10] - 2026-10-15
+
+### Fixed
+
+- **A player who rejoined quickly lost their character for that session.** When a game
+  crashes or is closed, its connection stays on the server until it times out (about 40-50
+  seconds). A player who restarted and rejoined inside that window had their Steam ID refused
+  as "already aboard", so the server fell back to the join slot and loaded whatever character
+  that slot held. A rejoin from the same address now replaces the stale connection: the old
+  one is removed (its character is saved as it leaves) and the new one loads the player's own
+  character. The same account joining from a different address is still refused.
+
 ## [0.1.9] - 2026-10-12
 
 ### Fixed

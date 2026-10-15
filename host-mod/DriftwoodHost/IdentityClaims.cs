@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using FishNet;
 using FishNet.Connection;
+using FishNet.Managing.Logging;
 using FishNet.Managing.Server;
 
 namespace DriftwoodHost
@@ -80,6 +81,7 @@ namespace DriftwoodHost
 				return false;
 			}
 
+			NetworkConnection replaced = null;
 			lock (Sync)
 			{
 				PruneLocked();
@@ -102,18 +104,43 @@ namespace DriftwoodHost
 
 				// One person, one presence: a claim may not duplicate an id that is
 				// already aboard on another live connection - claimed or spawned.
+				//
+				// EXCEPT the same player coming straight back. A game that crashed or was
+				// closed leaves its connection aboard until the transport times it out
+				// (about 40-50 s, measured on the canary 2026-10-15), and a player who
+				// restarts and rejoins inside that window used to be refused here - so the
+				// spawn fell back to the join slot and loaded whatever character that slot
+				// held (measured: rejoin 6 s after a kill -> "already claimed", spawned as
+				// Player-0002). When the older connection plays from the SAME address this
+				// claim arrives from, it is that player's dead session: the new claim wins
+				// and the old connection is kicked, so its disconnect save lands before the
+				// new spawn loads the record. A different address is still refused - one
+				// account in two places is not this case.
+				NetworkConnection stale = null;
+				int staleClientId = -1;
 				foreach (KeyValuePair<int, Claim> pair in ByClientId)
 				{
 					if (pair.Value.SteamId == steamId && !ReferenceEquals(pair.Value.Connection, connection))
 					{
+						if (stale == null && PlaysFrom(pair.Value.Connection, httpAddress))
+						{
+							stale = pair.Value.Connection;
+							staleClientId = pair.Key;
+							continue;
+						}
 						refusal = "that id is already claimed by another connection";
 						return false;
 					}
 				}
-				if (SpawnedElsewhere(steamId, connection))
+				NetworkConnection spawnedOn = SpawnedElsewhere(steamId, connection);
+				if (spawnedOn != null && !ReferenceEquals(spawnedOn, stale))
 				{
-					refusal = "a player with that id is already aboard";
-					return false;
+					if (stale != null || !PlaysFrom(spawnedOn, httpAddress))
+					{
+						refusal = "a player with that id is already aboard";
+						return false;
+					}
+					stale = spawnedOn;
 				}
 
 				if (ByClientId.Count >= MaxClaims)
@@ -122,7 +149,27 @@ namespace DriftwoodHost
 					return false;
 				}
 
+				if (staleClientId >= 0) ByClientId.Remove(staleClientId);
 				ByClientId[clientId] = new Claim { Connection = connection, SteamId = steamId };
+				replaced = stale;
+			}
+
+			if (replaced != null)
+			{
+				int replacedId = -1;
+				try { replacedId = replaced.ClientId; } catch { }
+				try
+				{
+					replaced.Kick(KickReason.Unset, LoggingType.Common,
+						"Replaced by the same player's new connection (Driftwood).");
+				}
+				catch (Exception exception)
+				{
+					Plugin.Log?.LogWarning("Could not remove the earlier connection " + replacedId + " for a rejoining player: " +
+						exception.GetType().Name + " " + exception.Message);
+				}
+				Plugin.Log?.LogInfo("Identity claim for connection " + clientId + " replaces connection " + replacedId +
+					" from the same address: the player rejoined before the old connection timed out.");
 			}
 
 			RememberName(steamId, displayName);
@@ -202,25 +249,36 @@ namespace DriftwoodHost
 			foreach (int clientId in gone) ByClientId.Remove(clientId);
 		}
 
-		// A spawned player already carrying this id on a DIFFERENT connection means
-		// the id is taken. Walks the same roster seam everything else reads.
-		private static bool SpawnedElsewhere(ulong steamId, NetworkConnection claimant)
+		// Does this connection play from the address the claim arrived from? Same rule,
+		// same fail-closed parsing as the binding check in Submit.
+		private static bool PlaysFrom(NetworkConnection other, string httpAddress)
+		{
+			if (other == null) return false;
+			string address = null;
+			try { address = other.GetAddress(); } catch { }
+			return IdentityClaimRules.AddressesMatch(address, httpAddress);
+		}
+
+		// The connection whose spawned player already carries this id, other than the
+		// claimant's own; null when nobody does. Walks the same roster seam everything
+		// else reads.
+		private static NetworkConnection SpawnedElsewhere(ulong steamId, NetworkConnection claimant)
 		{
 			try
 			{
 				ServerManager server = InstanceFinder.ServerManager;
-				if (server == null || server.Clients == null) return false;
+				if (server == null || server.Clients == null) return null;
 				foreach (NetworkConnection other in server.Clients.Values)
 				{
 					if (other == null || ReferenceEquals(other, claimant)) continue;
 					Player player = null;
 					try { player = ServerRoster.OwnedPlayer(other); } catch { }
 					if (player == null) continue;
-					try { if (player.SteamID == steamId) return true; } catch { }
+					try { if (player.SteamID == steamId) return other; } catch { }
 				}
 			}
 			catch { }
-			return false;
+			return null;
 		}
 
 		private static void RememberName(ulong steamId, string displayName)
