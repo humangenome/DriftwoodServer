@@ -142,7 +142,9 @@ few minutes):
 DRIFTWOOD_HOSTING port=22003 slots=8 world=Driftwood pid=4242
 ```
 
-Everyone joins from the Driftwood app: add `<your address>:22003`, **Connect**.
+Everyone joins from the Driftwood app: add `<your address>:22003`, **Connect**. After a player's
+first Connect, the same address also works in How to Fish's own **Join Game** box. With app 0.1.4
+or later, each player's saved character follows their Steam account rather than the join order.
 
 Once in, players can type `!help`, `!stuck` (back to the island spawn), `!playtime` and `!top`
 (the catch leaderboard) into the game's own chat - nothing to install. The owner's console has
