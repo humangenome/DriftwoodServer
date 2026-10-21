@@ -21,6 +21,11 @@ namespace DriftwoodHost
 	{
 		internal const string TimestampHeader = "X-Driftwood-Timestamp";
 		internal const string SignatureHeader = "X-Driftwood-Signature";
+		// Optional. sha256hex of the body, sent by a caller that signs a body before sending it.
+		// The signature is then checked over this value before the body is read, and the body
+		// must hash to it. Required from a remote caller for a world upload or any body over
+		// ApiGate.UnhashedBodyBytes.
+		internal const string ContentShaHeader = "X-Driftwood-Content-Sha256";
 
 		// Signatures more than this far from now are refused. Wide enough for a launcher on a
 		// clock that has drifted a couple of minutes, narrow enough that a captured request is

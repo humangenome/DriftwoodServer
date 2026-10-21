@@ -37,6 +37,17 @@ X-Driftwood-Signature: hex(HMACSHA256(sha256(AuthToken), "METHOD\n<path>\n<ts>\n
 - `AuthToken` is the server's API secret, written by the hosting endpoint into
   `[Server] AuthToken`. An empty token makes every signed route refuse — fail-closed, and
   logged loudly at boot.
+- **Declared body hash (0.1.11).** A signed request may also send
+  `X-Driftwood-Content-Sha256: <sha256hex(body)>`. The host then checks the signature over that
+  value before it reads the body, and refuses the request if the body does not hash to it. A
+  caller on the network **must** send it for `POST /api/v1/snapshots/import-restore` and for any
+  body over 16 KB (`428` otherwise). Small signed JSON calls without it work as before.
+- **Limits (0.1.11).** Signature headers are checked before any body is read on a signed route.
+  Bodies: 4 KB on public routes, 64 KB on JSON routes, 64 MB on the world upload; a larger
+  `Content-Length` is `413` and nothing is read. The request head must arrive within 10 seconds.
+  Connections from the box itself (the hosting panel, the supervisor) have their own pool; callers
+  on the network share another, at most 4 per address; a verified upload or snapshot download moves
+  to a small pool of its own.
 
 There used to be a second scheme here, a static token in `X-Driftwood-Auth`, while the launcher
 signed every request the way the rest of the family signs them. Two schemes on one API is how one of

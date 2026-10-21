@@ -2,6 +2,17 @@
 
 All notable changes to DriftwoodServer are recorded here.
 
+## [0.1.11] - Unreleased
+
+### Changed
+
+- **Hardening of the host HTTP API.** Request size limits per route, a deadline for slow
+  requests, a connection pool for the hosting panel on the box that network callers cannot use
+  up, a per-address connection limit, and an optional declared body hash
+  (`X-Driftwood-Content-Sha256`) for signed requests. Uploading a world from the Driftwood app
+  needs app 0.1.5 or later on a 0.1.11 server; every other app feature works with older apps.
+  Details in `protocol/http-api.md`.
+
 ## [0.1.10] - 2026-10-15
 
 ### Fixed

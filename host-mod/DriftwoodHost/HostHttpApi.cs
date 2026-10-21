@@ -63,9 +63,11 @@ namespace DriftwoodHost
 		internal const string SignatureHeader = ApiSignature.SignatureHeader;
 		internal const string ShaHeader = "X-Driftwood-Sha256";
 
+		// Declared by a caller that signs a body before sending it (the Driftwood app's world
+		// upload), so the signature can be checked before the body is read.
+		internal const string ContentShaHeader = ApiSignature.ContentShaHeader;
+
 		private const int MaxHeaderBytes = 16 * 1024;
-		private const int MaxJsonBodyBytes = 64 * 1024;
-		private const int MaxConnections = 16;
 		private const int ReplayWindowSeconds = ApiSignature.ReplayWindowSeconds;
 
 		private readonly Readiness _readiness;
@@ -80,7 +82,8 @@ namespace DriftwoodHost
 		private TcpListener _listener;
 		private Thread _accept;
 		private volatile bool _running;
-		private int _connections;
+		private readonly ConnectionGate _gate =
+			new ConnectionGate(ApiGate.LoopbackCap, ApiGate.RemoteCap, ApiGate.PerAddressCap, ApiGate.LongCap);
 
 		internal HostHttpApi(HostConfig config, Readiness readiness)
 		{
@@ -162,24 +165,35 @@ namespace DriftwoodHost
 					continue;
 				}
 
-				// A hard connection cap is the whole DoS story on a public port, and it is the
-				// same one the sibling ships. Anything past it is closed immediately rather than
-				// queued, so a flood costs a socket accept and nothing else - in particular it
-				// never costs the frame loop.
-				if (Interlocked.Increment(ref _connections) > MaxConnections)
+				// Connection pools, decided at accept from the socket's own peer address (never a
+				// header). Loopback - the panel's poll and its save before a stop, the supervisor -
+				// has a pool no remote caller can fill. Remote callers share one pool with a
+				// per-address cap. Anything past a cap is closed immediately rather than queued, so
+				// a flood costs a socket accept and nothing else - in particular it never costs the
+				// frame loop.
+				bool loopback = false;
+				string remoteAddress = string.Empty;
+				try
 				{
-					Interlocked.Decrement(ref _connections);
+					IPEndPoint endpoint = client.Client.RemoteEndPoint as IPEndPoint;
+					loopback = endpoint != null && IPAddress.IsLoopback(endpoint.Address);
+					if (endpoint != null) remoteAddress = endpoint.Address.ToString();
+				}
+				catch { }
+				GateTicket ticket = _gate.TryAdmit(remoteAddress, loopback);
+				if (ticket == null)
+				{
 					try { client.Close(); } catch { }
 					continue;
 				}
 
 				Thread session = new Thread(() =>
 				{
-					try { Serve(client); }
+					try { Serve(client, ticket, loopback, remoteAddress); }
 					catch (Exception exception) { Plugin.Log?.LogDebug("API session: " + exception.Message); }
 					finally
 					{
-						Interlocked.Decrement(ref _connections);
+						_gate.Release(ticket);
 						try { client.Close(); } catch { }
 					}
 				});
@@ -259,6 +273,8 @@ namespace DriftwoodHost
 			internal string BodyFile;
 			internal string BodySha = string.Empty;
 			internal bool IsLoopback;
+			internal long ContentLength;
+			internal bool Chunked;
 			// The peer's IP as the socket saw it - never a header, headers are claims.
 			// Identity claims verify themselves against this.
 			internal string RemoteAddress = string.Empty;
@@ -270,27 +286,19 @@ namespace DriftwoodHost
 			}
 		}
 
-		private void Serve(TcpClient client)
+		private void Serve(TcpClient client, GateTicket ticket, bool loopback, string remoteAddress)
 		{
 			client.NoDelay = true;
 			client.ReceiveTimeout = 30000;
 			client.SendTimeout = 120000;
 			NetworkStream stream = client.GetStream();
 
-			bool loopback = false;
-			string remoteAddress = string.Empty;
-			try
-			{
-				IPEndPoint endpoint = client.Client.RemoteEndPoint as IPEndPoint;
-				loopback = endpoint != null && IPAddress.IsLoopback(endpoint.Address);
-				if (endpoint != null) remoteAddress = endpoint.Address.ToString();
-			}
-			catch { }
-
 			Request request = null;
 			try
 			{
-				request = ReadRequest(stream, loopback);
+				// THE WHOLE HEAD has one deadline, not a per-read timeout: a caller that trickles
+				// one byte every few seconds holds its slot for at most HeadDeadlineMs.
+				request = ReadHead(stream, loopback, NowMs() + ApiGate.HeadDeadlineMs);
 				if (request != null) request.RemoteAddress = remoteAddress;
 			}
 			catch (Exception exception)
@@ -306,7 +314,7 @@ namespace DriftwoodHost
 
 			try
 			{
-				Route(stream, request);
+				Route(stream, request, ticket);
 			}
 			catch (Exception exception)
 			{
@@ -315,14 +323,44 @@ namespace DriftwoodHost
 			}
 			finally
 			{
-				if (request.BodyFile != null)
-				{
-					try { if (File.Exists(request.BodyFile)) File.Delete(request.BodyFile); } catch { }
-				}
+				// A partial or refused upload never outlives its request.
+				DeleteBodyFile(request);
 			}
 		}
 
-		private Request ReadRequest(NetworkStream stream, bool loopback)
+		private static void DeleteBodyFile(Request request)
+		{
+			if (request == null || request.BodyFile == null) return;
+			try { if (File.Exists(request.BodyFile)) File.Delete(request.BodyFile); } catch { }
+			request.BodyFile = null;
+		}
+
+		private static long NowMs()
+		{
+			return System.Diagnostics.Stopwatch.GetTimestamp() * 1000L / System.Diagnostics.Stopwatch.Frequency;
+		}
+
+		// One read under a whole-request deadline. -1 = the deadline passed, the peer went away
+		// or the socket failed; the caller treats all three the same.
+		private static int ReadBefore(NetworkStream stream, byte[] buffer, int offset, int count, long deadlineMs)
+		{
+			long remaining = deadlineMs - NowMs();
+			if (remaining <= 0) return -1;
+			try
+			{
+				stream.ReadTimeout = (int)Math.Max(1, Math.Min(remaining, 30000));
+				int read = stream.Read(buffer, offset, count);
+				return read <= 0 ? -1 : read;
+			}
+			catch
+			{
+				return -1;
+			}
+		}
+
+		// THE HEAD ONLY. No body byte is read here: whether a body is read at all, and how much,
+		// is decided after the route and its auth tier are known (see Route).
+		private Request ReadHead(NetworkStream stream, bool loopback, long deadlineMs)
 		{
 			MemoryStream head = new MemoryStream();
 			byte[] one = new byte[1];
@@ -330,10 +368,7 @@ namespace DriftwoodHost
 			bool complete = false;
 			while (head.Length < MaxHeaderBytes)
 			{
-				int read;
-				try { read = stream.Read(one, 0, 1); }
-				catch { return null; }
-				if (read <= 0) return null;
+				if (ReadBefore(stream, one, 0, 1, deadlineMs) <= 0) return null;
 				head.WriteByte(one[0]);
 				b0 = b1; b1 = b2; b2 = b3; b3 = one[0];
 				if (b0 == (byte)'\r' && b1 == (byte)'\n' && b2 == (byte)'\r' && b3 == (byte)'\n')
@@ -387,62 +422,63 @@ namespace DriftwoodHost
 			if (transferEncoding != null &&
 				transferEncoding.IndexOf("chunked", StringComparison.OrdinalIgnoreCase) >= 0)
 			{
-				request.Path = "/chunked-unsupported";
+				request.Chunked = true;
 				return request;
 			}
 
 			string contentLength = request.Header("Content-Length");
 			long length;
-			if (contentLength == null || !long.TryParse(contentLength, out length) || length <= 0)
+			if (contentLength != null && long.TryParse(contentLength, NumberStyles.Integer, CultureInfo.InvariantCulture, out length) && length > 0)
+			{
+				request.ContentLength = length;
+			}
+			return request;
+		}
+
+		// A small body, held in memory, read under its own deadline.
+		private static bool ReadSmallBody(NetworkStream stream, Request request, long deadlineMs)
+		{
+			if (request.ContentLength <= 0)
 			{
 				request.BodySha = Sha256Hex(new byte[0]);
-				return request;
+				return true;
 			}
-
-			bool upload = IsUploadRoute(request.Method, request.Path);
-			long cap = upload ? SnapshotStore.MaxImportBytes : MaxJsonBodyBytes;
-			if (length > cap) return null;
-
-			if (!upload)
+			byte[] body = new byte[(int)request.ContentLength];
+			int got = 0;
+			while (got < body.Length)
 			{
-				byte[] body = new byte[(int)length];
-				int got = 0;
-				while (got < body.Length)
-				{
-					int read;
-					try { read = stream.Read(body, got, body.Length - got); }
-					catch { return null; }
-					if (read <= 0) return null;
-					got += read;
-				}
-				request.Body = body;
-				request.BodySha = Sha256Hex(body);
-				return request;
+				int read = ReadBefore(stream, body, got, body.Length - got, deadlineMs);
+				if (read <= 0) return false;
+				got += read;
 			}
+			request.Body = body;
+			request.BodySha = Sha256Hex(body);
+			return true;
+		}
 
-			// Streamed to disk, hashed on the way past. A world archive must never be held in
-			// the game process's heap: this runs inside Unity, and a body-sized allocation on a
-			// box hosting a hundred instances is a memory spike nobody asked for.
+		// Streamed to disk, hashed on the way past. A world archive must never be held in
+		// the game process's heap: this runs inside Unity, and a body-sized allocation on a
+		// box hosting a hundred instances is a memory spike nobody asked for. Reached only by a
+		// caller that has already passed the signature check (or a loopback caller on the box).
+		private static bool StreamUploadBody(NetworkStream stream, Request request)
+		{
 			string temporary = Path.Combine(Path.GetTempPath(), "driftwood-upload-" + Guid.NewGuid().ToString("N") + ".zip");
+			request.BodyFile = temporary;
 			try
 			{
 				using (SHA256 sha = SHA256.Create())
 				using (FileStream file = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None, 64 * 1024))
 				{
 					byte[] buffer = new byte[64 * 1024];
-					long remaining = length;
+					long remaining = request.ContentLength;
+					stream.ReadTimeout = 30000;
 					while (remaining > 0)
 					{
 						int want = (int)Math.Min(buffer.Length, remaining);
 						int read;
 						try { read = stream.Read(buffer, 0, want); }
 						catch { read = -1; }
-						if (read <= 0)
-						{
-							try { file.Dispose(); } catch { }
-							try { File.Delete(temporary); } catch { }
-							return null;
-						}
+						if (read <= 0) return false;
 						sha.TransformBlock(buffer, 0, read, null, 0);
 						file.Write(buffer, 0, read);
 						remaining -= read;
@@ -450,31 +486,49 @@ namespace DriftwoodHost
 					sha.TransformFinalBlock(new byte[0], 0, 0);
 					request.BodySha = ApiSignature.HexEncode(sha.Hash);
 				}
+				return true;
 			}
 			catch
 			{
-				try { if (File.Exists(temporary)) File.Delete(temporary); } catch { }
-				return null;
+				return false;
 			}
-			request.BodyFile = temporary;
-			return request;
 		}
 
-		// Decided before routing, because the body has to be read before the route's handler
-		// exists - and a snapshot archive must be streamed to disk rather than held in the
-		// game process's heap. Derived from the same pattern constant the table uses.
+		// Decided before the body is read, because a snapshot archive must be streamed to disk
+		// rather than held in the game process's heap. Derived from the same pattern constant
+		// the table uses.
 		private static bool IsUploadRoute(string method, string path)
 		{
 			return string.Equals(method, "POST", StringComparison.Ordinal) &&
 				string.Equals(path, SnapshotImportPattern, StringComparison.OrdinalIgnoreCase);
 		}
 
+		private static bool IsDownloadRoute(RouteSpec spec)
+		{
+			return spec.Pattern == "/api/v1/snapshots/{id}/download";
+		}
+
+		private static GateTier ToGate(AuthTier tier)
+		{
+			switch (tier)
+			{
+				case AuthTier.Public: return GateTier.Public;
+				case AuthTier.LoopbackOrSigned: return GateTier.LoopbackOrSigned;
+				default: return GateTier.Signed;
+			}
+		}
+
 		// ------------------------------------------------------------------
 		// Routing
+		//
+		// Order: route, then the auth tier's header checks, then (only if they pass) the body.
+		// A caller who has not proved anything never gets a temp file and never more than a few
+		// kilobytes of read; a signed upload is verified over its declared content hash before
+		// its first byte is accepted.
 		// ------------------------------------------------------------------
-		private void Route(NetworkStream stream, Request request)
+		private void Route(NetworkStream stream, Request request, GateTicket ticket)
 		{
-			if (request.Path == "/chunked-unsupported")
+			if (request.Chunked)
 			{
 				Write(stream, 411, "application/json", Error("this API needs a Content-Length; chunked bodies are not accepted"));
 				return;
@@ -487,11 +541,94 @@ namespace DriftwoodHost
 				Write(stream, 404, "application/json", Error("not found"));
 				return;
 			}
-			if (!Allowed(spec.Tier, request))
+
+			GateTier tier = ToGate(spec.Tier);
+			bool upload = IsUploadRoute(request.Method, request.Path);
+			bool needsSignature = ApiGate.NeedsSignature(tier, request.IsLoopback);
+			bool shapeOk = ApiGate.HeaderShapeOk(request.Header(TimestampHeader), request.Header(SignatureHeader),
+				PlayerDirectory.NowUnix(), ReplayWindowSeconds);
+			string declaredSha = request.Header(ContentShaHeader);
+			BodyPlan plan = ApiGate.Plan(tier, request.IsLoopback, upload, request.ContentLength, declaredSha,
+				_authUsable, shapeOk, SnapshotStore.MaxImportBytes);
+
+			switch (plan)
 			{
-				Refused(stream);
+				case BodyPlan.RefuseTooLarge:
+					Write(stream, 413, "application/json", Error("request body too large"));
+					return;
+				case BodyPlan.RefuseUnauthorised:
+					Refused(stream);
+					return;
+				case BodyPlan.RefuseNeedsHash:
+					Write(stream, 428, "application/json", Error("this request must carry " + ContentShaHeader +
+						" (update the Driftwood app to upload a world)"));
+					return;
+				case BodyPlan.NoBody:
+					request.BodySha = Sha256Hex(new byte[0]);
+					if (needsSignature && !Authorised(request, request.BodySha)) { Refused(stream); return; }
+					break;
+				case BodyPlan.Read:
+					if (!ReadSmallBody(stream, request, NowMs() + ApiGate.SmallBodyDeadlineMs))
+					{
+						Write(stream, 400, "application/json", Error("bad request"));
+						return;
+					}
+					break;
+				case BodyPlan.ReadThenVerify:
+				{
+					bool read = upload
+						? StreamUploadBody(stream, request)
+						: ReadSmallBody(stream, request, NowMs() + ApiGate.SmallBodyDeadlineMs);
+					if (!read)
+					{
+						DeleteBodyFile(request);
+						Write(stream, 400, "application/json", Error("bad request"));
+						return;
+					}
+					if (!Authorised(request, request.BodySha))
+					{
+						DeleteBodyFile(request);
+						Refused(stream);
+						return;
+					}
+					break;
+				}
+				case BodyPlan.VerifyThenRead:
+				{
+					string declared = declaredSha.Trim().ToLowerInvariant();
+					if (!Authorised(request, declared)) { Refused(stream); return; }
+					if (upload && !_gate.TryPromoteLong(ticket))
+					{
+						Write(stream, 503, "application/json", Error("busy, try again shortly"));
+						return;
+					}
+					bool read = upload
+						? StreamUploadBody(stream, request)
+						: ReadSmallBody(stream, request, NowMs() + ApiGate.SmallBodyDeadlineMs);
+					if (!read)
+					{
+						DeleteBodyFile(request);
+						Write(stream, 400, "application/json", Error("bad request"));
+						return;
+					}
+					if (!ApiSignature.ConstantTimeEquals(declared, request.BodySha))
+					{
+						DeleteBodyFile(request);
+						Refused(stream);
+						return;
+					}
+					break;
+				}
+			}
+
+			// A verified snapshot download can run for minutes on a slow line; it leaves the
+			// remote pool so it cannot hold a slot the public routes need.
+			if (IsDownloadRoute(spec) && !_gate.TryPromoteLong(ticket))
+			{
+				Write(stream, 503, "application/json", Error("busy, try again shortly"));
 				return;
 			}
+
 			Dispatch(stream, request, spec, id);
 		}
 
@@ -518,16 +655,6 @@ namespace DriftwoodHost
 				return spec;
 			}
 			return null;
-		}
-
-		private bool Allowed(AuthTier tier, Request request)
-		{
-			switch (tier)
-			{
-				case AuthTier.Public: return true;
-				case AuthTier.LoopbackOrSigned: return request.IsLoopback || Authorised(request);
-				default: return Authorised(request);
-			}
 		}
 
 		private void Dispatch(NetworkStream stream, Request request, RouteSpec spec, string id)
@@ -910,7 +1037,10 @@ namespace DriftwoodHost
 		// ------------------------------------------------------------------
 		// Auth
 		// ------------------------------------------------------------------
-		private bool Authorised(Request request)
+		// bodySha is the body hash the signature must cover: the hash of the bytes read, or, for
+		// a caller that declared it up front, the declared hash (the body is then required to
+		// match it after it is read).
+		private bool Authorised(Request request, string bodySha)
 		{
 			if (!_authUsable) return false;
 			string timestampHeader = request.Header(TimestampHeader);
@@ -922,7 +1052,7 @@ namespace DriftwoodHost
 			long now = PlayerDirectory.NowUnix();
 			if (Math.Abs(now - timestamp) > ReplayWindowSeconds) return false;
 
-			string canonical = ApiSignature.Canonical(request.Method, request.Path, timestamp, request.BodySha);
+			string canonical = ApiSignature.Canonical(request.Method, request.Path, timestamp, bodySha ?? string.Empty);
 			string expected = ApiSignature.Compute(_authKey, canonical);
 
 			string supplied = signatureHeader.Trim().ToLowerInvariant();
@@ -1021,6 +1151,8 @@ namespace DriftwoodHost
 				case 404: return "Not Found";
 				case 405: return "Method Not Allowed";
 				case 411: return "Length Required";
+				case 413: return "Payload Too Large";
+				case 428: return "Precondition Required";
 				case 500: return "Internal Server Error";
 				case 503: return "Service Unavailable";
 				default: return "OK";
