@@ -59,7 +59,7 @@ fi
 # survives a clone and points a whole fleet at the wrong bucket.
 if grep -rniE "$clone" --include='*.cs' --include='*.ps1' --include='*.sh' --include='*.csproj' \
      "$root/src" "$root/host-mod" "$root/tools" "$root/scripts" 2>/dev/null \
-   | grep -v 'check-leaks.sh' | grep -vE '^\s*[^:]+:[0-9]+:\s*//' | grep -q .; then
+   | grep -v 'check-leaks.sh' | grep -vE '^\s*[^:]+:[0-9]+:\s*//' | grep . >/dev/null; then
   printf 'FAIL: clone residue in source outside comments:\n'
   grep -rniE "$clone" --include='*.cs' --include='*.ps1' --include='*.sh' --include='*.csproj' \
     "$root/src" "$root/host-mod" "$root/tools" "$root/scripts" 2>/dev/null \
@@ -75,13 +75,13 @@ if [ -f "$root/host-mod/DriftwoodHost/FrameLimiter.cs" ]; then
   # Comment lines do not count as calls. Checking that without stripping them is how a check
   # passes on the exact edit it exists to catch - commenting the call out.
   live_plugin="$(grep -v '^[[:space:]]*//' "$root/host-mod/DriftwoodHost/Plugin.cs")"
-  printf '%s' "$live_plugin" | grep -q 'FrameLimiter\.Apply(' \
+  printf '%s' "$live_plugin" | grep 'FrameLimiter\.Apply(' >/dev/null \
     || bad "FrameLimiter exists but Plugin.cs never calls FrameLimiter.Apply - every capped run would be uncapped"
-  printf '%s' "$live_plugin" | grep -q 'FrameLimiter\.SetIdleFrameRate(' \
+  printf '%s' "$live_plugin" | grep 'FrameLimiter\.SetIdleFrameRate(' >/dev/null \
     || bad "FrameLimiter.SetIdleFrameRate is never called - the idle-rate lever would be inert"
 fi
 if [ -f "$root/host-mod/DriftwoodHost/EmptyWorldPause.cs" ]; then
-  grep -v '^[[:space:]]*//' "$root/host-mod/DriftwoodHost/Plugin.cs" | grep -q 'EmptyWorldPause\.Update(' \
+  grep -v '^[[:space:]]*//' "$root/host-mod/DriftwoodHost/Plugin.cs" | grep 'EmptyWorldPause\.Update(' >/dev/null \
     || bad "EmptyWorldPause exists but is never driven - the empty-world lever would be inert"
 fi
 
