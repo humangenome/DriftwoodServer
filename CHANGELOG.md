@@ -2,7 +2,7 @@
 
 All notable changes to DriftwoodServer are recorded here.
 
-## [0.1.11] - Unreleased
+## [0.1.11] - 2026-10-21
 
 ### Changed
 
