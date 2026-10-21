@@ -139,7 +139,7 @@ namespace DriftwoodHost
 					foreach (Entry entry in loaded) Entries[entry.SteamId] = entry;
 					if (bad > 0)
 					{
-						return bad + " line(s) of " + _path + " could not be read and were skipped; the rest loaded";
+						return Wording.Count(bad, "line") + " of " + _path + " could not be read and were skipped; the rest loaded";
 					}
 					return null;
 				}

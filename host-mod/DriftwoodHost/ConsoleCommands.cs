@@ -708,7 +708,7 @@ namespace DriftwoodHost
 		private static string Status(Readiness readiness, HostConfig config)
 		{
 			StringBuilder builder = new StringBuilder();
-			builder.Append(readiness.Phase.ToString()).Append(" - ").Append(readiness.Reason).Append('\n');
+			builder.Append(Wording.StatusHeadline(readiness.Phase.ToString(), readiness.Reason)).Append('\n');
 			builder.Append("world     ").Append(readiness.WorldName).Append('\n');
 			builder.Append("players   ");
 			if (readiness.WorldRunning) builder.Append(readiness.Players).Append(" of ").Append(readiness.Slots);
@@ -717,7 +717,7 @@ namespace DriftwoodHost
 			builder.Append("port      ").Append(readiness.Port).Append(" UDP\n");
 			builder.Append("driftwood ").Append(readiness.PluginVersion).Append('\n');
 			builder.Append("game      ").Append(readiness.GameVersion.Length == 0 ? "unknown" : readiness.GameVersion).Append('\n');
-			builder.Append("blocked   ").Append(Blocklist.Count).Append(" player(s)\n");
+			builder.Append("blocked   ").Append(Wording.Count(Blocklist.Count, "player")).Append('\n');
 			builder.Append("names     ").Append(readiness.SteamNameResolution.Length == 0 ? "(not sampled yet)" : readiness.SteamNameResolution).Append('\n');
 			builder.Append("discord   ").Append(readiness.DiscordAlertsState.Length == 0 ? "(not sampled yet)" : readiness.DiscordAlertsState).Append('\n');
 			builder.Append("chat cmds ").Append(readiness.PlayerChatState.Length == 0 ? "(not sampled yet)" : readiness.PlayerChatState).Append('\n');

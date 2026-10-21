@@ -88,14 +88,14 @@ namespace DriftwoodHost
 		{
 			if (!CatchLedger.Enabled) return;
 			_state = applied
-				? "on (" + CatchLedger.Count + " player(s) on the board)"
+				? "on (" + Wording.Count(CatchLedger.Count, "player") + " on the board)"
 				: "off (the game build no longer has the catch path this hooks)";
 		}
 
 		internal static void RefreshState()
 		{
 			if (_state.StartsWith("on (", StringComparison.Ordinal))
-				_state = "on (" + CatchLedger.Count + " player(s) on the board)";
+				_state = "on (" + Wording.Count(CatchLedger.Count, "player") + " on the board)";
 		}
 
 		internal static IEnumerable<PatchTarget> Targets()

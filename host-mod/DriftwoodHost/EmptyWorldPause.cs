@@ -102,7 +102,7 @@ namespace DriftwoodHost
 			Time.timeScale = 1f;
 			Paused = false;
 			ResumeCount++;
-			Plugin.Log?.LogInfo("World resumed (" + ResumeCount + " time(s) so far).");
+			Plugin.Log?.LogInfo("World resumed (" + Wording.Count(ResumeCount, "time") + " so far).");
 		}
 
 		// Belt and braces for the one failure that would matter: leaving a server frozen. Anything
