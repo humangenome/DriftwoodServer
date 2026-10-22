@@ -164,6 +164,60 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 0b. The host must fit the game build it will run on
+# ---------------------------------------------------------------------------
+# CI cannot compile the host: it binds the game's own assemblies, which are never
+# committed. So this is the one place the shipped DLL is proven against a real game
+# build. GAME_MANAGED_DIR is the "How to Fish_Data/Managed" of the build servers will
+# run (default: host-mod/DriftwoodHost/refs, the gitignored local copy); add any
+# older build the fleet still runs in GAME_MANAGED_DIRS_EXTRA, colon-separated.
+# check-game-build.sh compiles the host against each and resolves every member the
+# DLL binds against all of them. A member a game update renamed is not a compile
+# error on a server: it is a MissingFieldException the first time that code runs,
+# which is how 0.1.8 never finished booting on game 1.1.x. The output goes into the
+# release folder as build-check.txt, so a release says what it was checked against.
+GAME_MANAGED_DIR="${GAME_MANAGED_DIR:-$MODS_DIR/DriftwoodHost/refs}"
+[[ -f "$GAME_MANAGED_DIR/Assembly-CSharp.dll" ]] || die "no Assembly-CSharp.dll in GAME_MANAGED_DIR=$GAME_MANAGED_DIR -- point it at the game build servers will run"
+check_dirs=("$GAME_MANAGED_DIR")
+if [[ -n "${GAME_MANAGED_DIRS_EXTRA:-}" ]]; then
+  IFS=':' read -r -a extra_dirs <<< "$GAME_MANAGED_DIRS_EXTRA"
+  for d in "${extra_dirs[@]}"; do
+    [[ -z "$d" ]] && continue
+    [[ -f "$d/Assembly-CSharp.dll" ]] || die "no Assembly-CSharp.dll in GAME_MANAGED_DIRS_EXTRA entry $d"
+    check_dirs+=("$d")
+  done
+fi
+BUILD_CHECK_LOG="$ROOT/dist/stage/$TAG-build-check.txt"
+mkdir -p "$(dirname "$BUILD_CHECK_LOG")"
+if [[ "${SKIP_GAME_BUILD_CHECK:-0}" == "1" ]]; then
+  say "SKIPPING the game-build check (dev packaging) -- never do this for a real release"
+  printf 'DriftwoodServer %s: game-build check SKIPPED (dev packaging)\n' "$VERSION" > "$BUILD_CHECK_LOG"
+else
+  say "game-build check against ${#check_dirs[@]} build(s)"
+  {
+    printf 'DriftwoodServer %s: host checked against these game builds (Assembly-CSharp.dll sha256)\n' "$VERSION"
+    for d in "${check_dirs[@]}"; do
+      printf '  %s\n' "$(sha256sum "$d/Assembly-CSharp.dll" | awk '{print $1}')"
+    done
+    printf '\n'
+  } > "$BUILD_CHECK_LOG"
+  # The log is attached to a public release: every local path becomes buildN or is cut.
+  check_rc=0
+  check_out="$("$ROOT/tools/ci/check-game-build.sh" "${check_dirs[@]}" 2>&1)" || check_rc=$?
+  for i in "${!check_dirs[@]}"; do
+    check_out="${check_out//"${check_dirs[$i]}"/build$((i + 1))}"
+  done
+  check_out="${check_out//"$ROOT/"/}"
+  check_out="${check_out//"$HOME"/"~"}"
+  printf '%s\n' "$check_out" >> "$BUILD_CHECK_LOG"
+  if [[ $check_rc -ne 0 ]] || ! tail -1 "$BUILD_CHECK_LOG" | grep -q '^OK: one host DLL fits every build given'; then
+    cat "$BUILD_CHECK_LOG" >&2
+    die "the host does not fit the game build(s) given -- nothing is packaged"
+  fi
+  tail -1 "$BUILD_CHECK_LOG" | sed 's/^/    /'
+fi
+
+# ---------------------------------------------------------------------------
 # 1. The bundle's plugins, DECLARED and enforced in both directions
 # ---------------------------------------------------------------------------
 # SERVER_PLUGINS is the required-files list for everything a hosted SERVER
@@ -335,6 +389,11 @@ rm -f "$OVERLAY_ZIP"
 
 SHA=$(sha256sum "$OVERLAY_ZIP" | awk '{print $1}')
 
+# Release assets beside the bundle: SHA256SUMS.txt (the family release standard) and
+# the game-build check this bundle passed.
+printf '%s  %s\n' "$SHA" "DriftwoodServer-$VERSION.zip" > "$OUT_DIR/SHA256SUMS.txt"
+cp "$BUILD_CHECK_LOG" "$OUT_DIR/build-check.txt"
+
 # Prove the archive round-trips before anyone uploads it. A zip that packs fine
 # and cannot be read is caught here rather than by every host on the fleet.
 unzip -tqq "$OVERLAY_ZIP" >/dev/null || die "the packed zip does not verify"
@@ -358,6 +417,10 @@ Built, not shipped.
 That sha256 is NOT the value to pin. Pin the hash measured by fetching the file
 back from the CDN edge -- the publish step prints it, and the two agreeing is the
 only proof the edge serves what was built.
+
+Attach to the GitHub release with the bundle:
+  $OUT_DIR/SHA256SUMS.txt
+  $OUT_DIR/build-check.txt
 
 Next:
   1. Publish:  upload the bundle to wherever your hosts download it from.

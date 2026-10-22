@@ -18,10 +18,12 @@ jobs:
         run: dotnet build src/DriftwoodServer/DriftwoodServer.csproj -c Release
       - name: Test
         run: dotnet test src/DriftwoodServer.Tests/DriftwoodServer.Tests.csproj -c Release --no-build
-      - name: Build the host mod and the bench rig
-        # They compile against the game's own assemblies, which are never committed, so CI can only
-        # build them when a Managed directory is supplied. Skipped rather than silently passing.
-        run: echo "host mod build requires -p:ManagedDir=<game>/Managed; run locally"
+      - name: Where the host mod is built
+        # The host mod and the bench client compile against the game's own assemblies, which are
+        # never committed, so CI cannot build them. The release gate is in the packager instead:
+        # scripts/package-server-overlay.sh refuses to package unless tools/ci/check-game-build.sh
+        # passes against the game build in GAME_MANAGED_DIR, and the release carries its output.
+        run: echo "host mod: built and checked against the game build by scripts/package-server-overlay.sh (release asset build-check.txt)"
       - name: Leak and clone-residue scan
         run: ./tools/ci/check-leaks.sh
       - name: Required-files declaration
