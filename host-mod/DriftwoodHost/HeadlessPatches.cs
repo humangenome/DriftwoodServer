@@ -101,6 +101,36 @@ namespace DriftwoodHost
 				Why = "Reachable only from the DazedCommands cheat path, and it calls four SDK methods directly."
 			};
 
+			// Explosion and boss-death effects end in Player.LocalPlayer.ScreenShake, and a dedicated
+			// host has no local player. ExplosionManager.ServerExplode calls ExplodeEffects on the
+			// server BEFORE it sends ObserverExplode and despawns the explosive, so the null threw
+			// out of the server's explode: damage, knockback and loot had already landed, but no
+			// client was ever told to play the explosion and the spent explosive was never despawned
+			// (DriftwoodServer issue #1, "bombs have no explosion effect"). BossExplosion runs from
+			// every boss's OnStopClient, which on the host is the loopback client handling the
+			// boss's despawn; the same null aborted that despawn read ("error while parsing data for
+			// packetId ObjectDespawn" at the boss death, the issue's second symptom). Both methods
+			// only play particles, sounds, decals and screen shake, which a server never needs.
+			// Read in game code 1.0.5 and 1.1.3; the bench client cannot throw a bomb, so the
+			// in-game proof is the boss half (owner `killboss`) and a canary player's bomb.
+			yield return new PatchTarget
+			{
+				TypeName = "ExplosionManager",
+				MethodName = "ExplodeEffects",
+				Kind = PatchKind.Skip,
+				Necessity = PatchNecessity.Optional,
+				Why = "Effects only, and it dereferences Player.LocalPlayer; the throw stopped the server from sending the explosion to clients and despawning the explosive."
+			};
+
+			yield return new PatchTarget
+			{
+				TypeName = "BossManager",
+				MethodName = "BossExplosion",
+				Kind = PatchKind.Skip,
+				Necessity = PatchNecessity.Optional,
+				Why = "Boss death effects only, and it dereferences Player.LocalPlayer; the throw broke the host's handling of the boss despawn."
+			};
+
 			// Boot-path Steam components. The game survives these unpatched, so they are optional -
 			// but SteamManager.Awake failing leaves a half-built singleton behind.
 			yield return new PatchTarget

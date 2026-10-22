@@ -2,6 +2,12 @@
 
 All notable changes to DriftwoodServer are recorded here.
 
+## [Unreleased]
+
+### Fixed
+
+- **Bombs exploded with no effect, and a boss death could leave players stuck in the death scene** (issue #1). The game plays an explosion's effects on the server before it tells the players about the explosion, and those effects shake the local player's screen. A dedicated server has no local player, so that step failed: damage, knockback and loot landed, but no player saw the explosion and the spent explosive stayed in the world. A boss death failed the same way inside the server's handling of the boss leaving the world. The server now skips explosion and boss-death effects, which only draw, play sound and shake the screen.
+
 ## [0.1.11] - 2026-10-21
 
 ### Changed

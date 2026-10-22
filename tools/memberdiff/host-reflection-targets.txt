@@ -27,6 +27,8 @@ Item:method:SetSyncedHolder
 Server:method:RpcLogic___HitCreature___215526726
 InstanceManager:method:RenderBatches
 PlayerHands:method:LateUpdate
+ExplosionManager:method:ExplodeEffects
+BossManager:method:BossExplosion
 NPC:method:Update
 Player:method:LateUpdate
 AchievementManager:method:UnlockAchievement
