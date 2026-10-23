@@ -201,7 +201,7 @@ The host mod (`host-mod/DriftwoodHost`) compiles against the game's own assembli
 
 ## Releases
 
-Each [release](https://github.com/HumanGenome/DriftwoodServer/releases) carries `DriftwoodServer-<version>.zip`, the files step 3 copies into the game, and notes on what changed. The full history is in [CHANGELOG.md](CHANGELOG.md). The player app's releases are on the [Driftwood repo](https://github.com/HumanGenome/Driftwood/releases).
+Each [release](https://github.com/HumanGenome/DriftwoodServer/releases) carries `DriftwoodServer-<version>.zip`, the files step 3 copies into the game, and notes on what changed. From 0.1.12 a release also carries `SHA256SUMS.txt`, the zip's SHA-256, and `build-check.txt`, the game builds the host was checked against. The full history is in [CHANGELOG.md](CHANGELOG.md). The player app's releases are on the [Driftwood repo](https://github.com/HumanGenome/Driftwood/releases).
 
 ## Contributing
 
