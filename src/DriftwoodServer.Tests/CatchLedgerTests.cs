@@ -191,7 +191,7 @@ public class CatchLedgerTests : IDisposable
             "76561198000000002\tOld\t1\t50\t0\t10\n");
         string? problem = CatchLedger.Initialise(_root, "Driftwood");
         Assert.NotNull(problem);
-        Assert.Contains("3 line(s)", problem);
+        Assert.Contains("3 lines", problem);
         Assert.Equal(2, CatchLedger.Count);
         Assert.Equal(3, CatchLedger.Get(Ryan)!.Catches);
         // An older, shorter row (no best-catch columns) still loads.

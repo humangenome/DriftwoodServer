@@ -196,7 +196,7 @@ namespace DriftwoodHost
 			}
 			else if (Blocklist.Count > 0)
 			{
-				Logger.LogInfo("Blocklist loaded: " + Blocklist.Count + " blocked player(s) will be kept out.");
+				Logger.LogInfo("Blocklist loaded: " + Wording.Count(Blocklist.Count, "blocked player") + " will be kept out.");
 			}
 			SteamNameResolver.Initialise(_config, stateDirectory);
 
@@ -233,7 +233,7 @@ namespace DriftwoodHost
 			{
 				ledgerProblem = CatchLedger.Initialise(_readiness.SaveDirectory, _config.WorldName);
 				if (ledgerProblem != null) Logger.LogWarning("Catch leaderboard: " + ledgerProblem + ".");
-				else if (CatchLedger.Count > 0) Logger.LogInfo("Catch leaderboard loaded: " + CatchLedger.Count + " player(s) on the board.");
+				else if (CatchLedger.Count > 0) Logger.LogInfo("Catch leaderboard loaded: " + Wording.Count(CatchLedger.Count, "player") + " on the board.");
 			}
 			CatchHooks.Configure(_config.Leaderboard, ledgerProblem);
 

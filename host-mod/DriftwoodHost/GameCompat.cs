@@ -333,7 +333,7 @@ namespace DriftwoodHost
 					moved++;
 				}
 				bool boat = MoveBoatHome();
-				Plugin.Log?.LogInfo("Island change finished: moved " + moved + " player(s)" + (boat ? " and the boat" : "") +
+				Plugin.Log?.LogInfo("Island change finished: moved " + Wording.Count(moved, "player") + (boat ? " and the boat" : "") +
 					" to island " + (manager._curIsland.Value + 1) + " (spawn " + target.x.ToString("0.#") + ", " + target.y.ToString("0.#") + ", " + target.z.ToString("0.#") +
 					"), a step this game build leaves to a local player the server does not have.");
 			}

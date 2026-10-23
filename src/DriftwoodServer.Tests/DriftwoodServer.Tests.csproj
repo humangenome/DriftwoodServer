@@ -48,6 +48,7 @@
          ordering and on-disk round trip. Neither binds Unity, BepInEx or a game type. -->
     <Compile Include="../../host-mod/DriftwoodHost/PlayerCommands.cs" Link="Linked/PlayerCommands.cs" />
     <Compile Include="../../host-mod/DriftwoodHost/CatchLedger.cs" Link="Linked/CatchLedger.cs" />
+    <Compile Include="../../host-mod/DriftwoodHost/Wording.cs" Link="Linked/Wording.cs" />
     <!-- The API port's admission and body rules: which caller holds a connection, and how much
          of a body is read before the caller has proved anything. Socket-free on purpose, so the
          order "headers, then body" is proven here and not only on a canary. -->
