@@ -2,6 +2,12 @@
 
 All notable changes to DriftwoodServer are recorded here.
 
+## [Unreleased]
+
+### Fixed
+
+- **One repeating game error could fill the disk.** On game 1.1.3 the game's projectile scan sometimes throws the same error on every physics step: in one test session it wrote 16,571 copies in five minutes (5 MB), and a server left running for days would write about a gigabyte a day into one log. The server now writes the same error or warning line at most 5 times a minute, and no more than 300 error and warning lines a minute in all; the rest are counted and the log gets one summary line a minute saying how many times each line came. Ordinary log lines are never held back. The count since start is in the readiness file as `logLinesHeldBack`.
+
 ## [0.1.12] - 2026-10-23
 
 ### Fixed

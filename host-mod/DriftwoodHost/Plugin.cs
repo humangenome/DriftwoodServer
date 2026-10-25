@@ -67,6 +67,11 @@ namespace DriftwoodHost
 			Silence.LogWarning = message => Log?.LogWarning(message);
 			Silence.Install();
 
+			// Next, so a game error that repeats every frame cannot fill the disk with one line
+			// (1.1.3's ProjectileManager scan threw 55 times a second in a lab run). Errors and
+			// warnings only, each line at most five times a minute, with a count for the rest.
+			LogFloodGuard.Install();
+
 			// The GetSteamID guard asks SpawnIdentity who is spawning right now. Wired here as
 			// a delegate because the bench rig links SteamGuards without SpawnIdentity's
 			// FishNet dependency chain - see the note on SteamGuards.CurrentIdentity.
@@ -739,6 +744,7 @@ namespace DriftwoodHost
 				_readiness.WorldResumeCount = EmptyWorldPause.ResumeCount;
 				_readiness.WorldSavesOnPause = EmptyWorldPause.SavesOnPause;
 				_readiness.WorldSaveOnPauseFailures = EmptyWorldPause.FailedSavesOnPause;
+				_readiness.LogLinesHeldBack = LogFloodGuard.HeldBack;
 			}
 			catch (Exception exception)
 			{
@@ -812,6 +818,8 @@ namespace DriftwoodHost
 			while (true)
 			{
 				yield return new WaitForSecondsRealtime(30f);
+				// The log guard's per-minute summaries, written even when the log has gone quiet.
+				LogFloodGuard.Flush(message => Logger.LogWarning(message));
 				double windowSeconds;
 				List<SwallowCounter.Entry> alarming = SwallowCounter.Roll(out windowSeconds);
 				foreach (SwallowCounter.Entry entry in alarming)

@@ -119,6 +119,9 @@ namespace DriftwoodHost
 		// something loses it. A rising failure count is a data-loss risk, not a curiosity.
 		public int WorldSavesOnPause;
 		public int WorldSaveOnPauseFailures;
+		// Error and warning lines the log guard held back since start (LogFloodGuard). A number that
+		// keeps climbing is a game error repeating every frame: the log stays small, the fault does not go away.
+		public long LogLinesHeldBack;
 		public List<string> PatchesApplied = new List<string>();
 		public List<string> PatchesMissing = new List<string>();
 		public List<string> PatchesFailed = new List<string>();
@@ -229,6 +232,7 @@ namespace DriftwoodHost
 					.Add("worldResumeCount", WorldResumeCount)
 					.Add("worldSavesOnPause", WorldSavesOnPause)
 					.Add("worldSaveOnPauseFailures", WorldSaveOnPauseFailures)
+					.Add("logLinesHeldBack", LogLinesHeldBack)
 					.Add("swallowedTotal", SwallowCounter.TotalSwallowed())
 					.AddRaw("swallowed", swallowJson.ToString())
 					.AddStrings("patchesApplied", PatchesApplied)
