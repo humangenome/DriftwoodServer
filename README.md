@@ -45,7 +45,7 @@ Optional (`pauseWorldWhenEmpty`). With nobody on, the world stands still and the
 ## What you need
 
 - Windows 10, 11 or Server, x64
-- Your own Steam copy of How to Fish, installed. The server runs the game's files, and this repo ships none of them. Release 0.1.12 hosts game 1.1.x (tested on 1.1.3); releases before 0.1.9 do not start on 1.1.x.
+- Your own Steam copy of How to Fish, installed. The server runs the game's files, and this repo ships none of them. Release 0.1.13 hosts game 1.1.x (tested on 1.1.3); releases before 0.1.9 do not start on 1.1.x.
 - [Git](https://git-scm.com/downloads) and the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0), both free, used once in step 4
 - Two open ports: one UDP port for the game, plus the TCP port directly above it
 

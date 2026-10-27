@@ -2,12 +2,12 @@
 
 All notable changes to DriftwoodServer are recorded here.
 
-## [Unreleased]
+## [0.1.13] - 2026-10-27
 
 ### Fixed
 
 - **Projectiles could stop working on a server after a player died or left.** The game checks a projectile's distance from the player who fired it before it checks that the player still exists. Once that player was gone (for example, killed by their own dynamite and respawned), the projectile could never be removed: the server hit the same error on every physics step, and every projectile after it in the game's list stopped moving and hitting while anyone was aboard. On a test server that was about 100 errors a second. The server now removes a projectile whose owner is gone, which is what the game's own check intends.
-- **One repeating game error could fill the disk.** On game 1.1.3 the game's projectile scan sometimes throws the same error on every physics step: in one test session it wrote 16,571 copies in five minutes (5 MB), and a server left running for days would write about a gigabyte a day into one log. The server now writes the same error or warning line at most 5 times a minute, and no more than 300 error and warning lines a minute in all; the rest are counted and the log gets one summary line a minute saying how many times each line came. Ordinary log lines are never held back. The count since start is in the readiness file as `logLinesHeldBack`.
+- **One repeating game error could fill the disk.** The projectile error above wrote 16,571 copies in five minutes in one test session (5 MB), and any game error that repeats on every frame would do the same: a server left running for days could write gigabytes into one log. The server now writes the same error or warning line at most 5 times a minute, and no more than 300 error and warning lines a minute in all; the rest are counted and the log gets one summary line a minute saying how many times each line came. Ordinary log lines are never held back. The count since start is in the readiness file as `logLinesHeldBack`.
 
 ## [0.1.12] - 2026-10-23
 
