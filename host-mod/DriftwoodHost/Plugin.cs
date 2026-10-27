@@ -264,6 +264,7 @@ namespace DriftwoodHost
 			targets.AddRange(MoneyMirror.Targets());
 			targets.AddRange(PlayerPersistence.Targets());
 			targets.AddRange(GameCompat.Targets());
+			targets.AddRange(ProjectileOwnerGuard.Targets());
 			targets.Add(SlotGuard.RefusalCounterTarget());
 			if (_config.PlayerChatCommands) targets.AddRange(PlayerChat.Targets());
 			if (_config.Leaderboard && CatchLedger.Enabled) targets.AddRange(CatchHooks.Targets());

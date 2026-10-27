@@ -48,3 +48,5 @@ SpawnManager:field:PlayerSpawnPos
 SpawnManager:method:GetPlayerSpawnPos:1
 MoneyManager:field:_euro
 MoneyManager:method:set_Euro
+ProjectileManager:method:UpdateProjectileScan:2
+ProjectileManager:method:AddToRemoveQueue:1
