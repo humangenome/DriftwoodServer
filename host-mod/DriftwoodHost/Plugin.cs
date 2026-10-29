@@ -204,6 +204,7 @@ namespace DriftwoodHost
 				Logger.LogInfo("Blocklist loaded: " + Wording.Count(Blocklist.Count, "blocked player") + " will be kept out.");
 			}
 			SteamNameResolver.Initialise(_config, stateDirectory);
+			IdentityTicketState.Initialise(stateDirectory);
 
 			// Discord alerts, after the audit/blocklist/name layers they report on. Fail-soft by
 			// contract: no webhook (or a bad one) means alerts are off with one explanatory line,
@@ -746,6 +747,9 @@ namespace DriftwoodHost
 				_readiness.WorldSavesOnPause = EmptyWorldPause.SavesOnPause;
 				_readiness.WorldSaveOnPauseFailures = EmptyWorldPause.FailedSavesOnPause;
 				_readiness.LogLinesHeldBack = LogFloodGuard.HeldBack;
+				_readiness.IdentityVerified = System.Threading.Interlocked.Read(ref IdentityTicketState.Verified);
+				_readiness.IdentityUnverified = System.Threading.Interlocked.Read(ref IdentityTicketState.Unverified);
+				_readiness.IdentityRefused = System.Threading.Interlocked.Read(ref IdentityTicketState.Refused);
 			}
 			catch (Exception exception)
 			{

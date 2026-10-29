@@ -883,26 +883,78 @@ namespace DriftwoodHost
 			// legitimate claim that lands in a burst.
 			if (ClaimGateAdmits())
 			{
-				string remote = request.RemoteAddress;
-				string sanitized = name;
-				bool accepted = false;
-				string refusal = null;
-				string failure;
-				bool ran = MainThread.Run(() =>
+				// The Steam ticket check (SteamTicketRules has the why). It runs on this HTTP thread,
+				// inside the claim gate so a flood cannot spend the Web API key, and before the
+				// main-thread hop, so the game never waits on Steam.
+				string ticketHex;
+				bool ticketPresent = SteamTicketRules.TryParseTicket(JsonRead.String(request.Body, "ticket"), out ticketHex);
+				TicketCheck check = TicketCheck.NotChecked;
+				ulong checkedId = 0UL;
+				string checkDetail = null;
+				if (ticketPresent)
 				{
-					string reason;
-					accepted = IdentityClaims.Submit(clientId, steamId, sanitized, remote, out reason);
-					refusal = reason;
-				}, 5000, out failure);
-				if (ran && !accepted && refusal != null && _claimRefusalsLogged < 10)
-				{
-					_claimRefusalsLogged++;
-					Plugin.Log?.LogInfo("Identity claim for connection " + clientId + " refused: " + refusal + "." +
-						(_claimRefusalsLogged == 10 ? " Further refusals will not be logged." : ""));
+					check = SteamTicketCheck.Check(SteamNameResolver.ApiKeyForTicketChecks, ticketHex, out checkedId, out checkDetail);
 				}
-				else if (!ran)
+				string decisionReason;
+				ClaimDecision decision = SteamTicketRules.Decide(ticketPresent, check, checkedId, steamId,
+					IdentityTicketState.Ids.Contains(steamId), out decisionReason);
+
+				if (decision == ClaimDecision.Refuse)
 				{
-					Plugin.Log?.LogDebug("Identity claim could not run: " + failure);
+					System.Threading.Interlocked.Increment(ref IdentityTicketState.Refused);
+					if (_claimRefusalsLogged < 10)
+					{
+						_claimRefusalsLogged++;
+						Plugin.Log?.LogInfo("Identity claim for connection " + clientId + " refused: " + decisionReason +
+							(checkDetail != null ? " (" + checkDetail + ")" : "") + "." +
+							(_claimRefusalsLogged == 10 ? " Further refusals will not be logged." : ""));
+					}
+				}
+				else
+				{
+					string remote = request.RemoteAddress;
+					string sanitized = name;
+					bool accepted = false;
+					string refusal = null;
+					string failure;
+					bool ran = MainThread.Run(() =>
+					{
+						string reason;
+						accepted = IdentityClaims.Submit(clientId, steamId, sanitized, remote, out reason);
+						refusal = reason;
+					}, 5000, out failure);
+					if (ran && accepted)
+					{
+						if (decision == ClaimDecision.AcceptVerified)
+						{
+							System.Threading.Interlocked.Increment(ref IdentityTicketState.Verified);
+							if (IdentityTicketState.Ids.Add(steamId))
+							{
+								Plugin.Log?.LogInfo("Identity claim for connection " + clientId + " verified by Steam; from now on this server refuses unverified claims for that player.");
+							}
+						}
+						else
+						{
+							System.Threading.Interlocked.Increment(ref IdentityTicketState.Unverified);
+							if (_claimUnverifiedLogged < 10)
+							{
+								_claimUnverifiedLogged++;
+								Plugin.Log?.LogInfo("Identity claim for connection " + clientId + " accepted " + decisionReason +
+									(checkDetail != null ? " (" + checkDetail + ")" : "") + "." +
+									(_claimUnverifiedLogged == 10 ? " Further unverified claims will not be logged." : ""));
+							}
+						}
+					}
+					else if (ran && !accepted && refusal != null && _claimRefusalsLogged < 10)
+					{
+						_claimRefusalsLogged++;
+						Plugin.Log?.LogInfo("Identity claim for connection " + clientId + " refused: " + refusal + "." +
+							(_claimRefusalsLogged == 10 ? " Further refusals will not be logged." : ""));
+					}
+					else if (!ran)
+					{
+						Plugin.Log?.LogDebug("Identity claim could not run: " + failure);
+					}
 				}
 			}
 
@@ -913,6 +965,7 @@ namespace DriftwoodHost
 		private static long _claimWindowStart;
 		private static int _claimsInWindow;
 		private int _claimRefusalsLogged;
+		private int _claimUnverifiedLogged;
 
 		private static bool ClaimGateAdmits()
 		{

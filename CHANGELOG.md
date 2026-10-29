@@ -2,6 +2,12 @@
 
 All notable changes to DriftwoodServer are recorded here.
 
+## [Unreleased]
+
+### Fixed
+
+- **A player could load someone else's saved character by claiming their Steam ID.** The server only checked that a claim came from the same address as the player's game connection, so anyone who knew another player's Steam ID (it is public on their profile) could claim it while that player was away. With the Driftwood app 0.1.6 or later and a Steam Web API key on the server, the claim now carries a ticket from the player's own Steam, and the server asks Steam whose it is: a matching ticket is accepted, someone else's or a rejected one is refused. Claims that cannot be checked (an older app, no key, Steam down) still work as before, except for a Steam ID this server has already verified, which an unchecked claim can no longer take. The readiness file counts claims as `identityVerified`, `identityUnverified` and `identityRefused`.
+
 ## [0.1.13] - 2026-10-27
 
 ### Fixed

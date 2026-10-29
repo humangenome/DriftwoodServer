@@ -161,8 +161,10 @@ than rendering a card that apologises for itself.
 
 ## `POST /api/v1/identity`
 
-Request `{"clientId": "3", "steamId": "76561197960287930", "name": "Steve"}` - both numbers as
-**decimal strings**, because a SteamID64 does not survive every JSON number path. Reply
+Request `{"clientId": "3", "steamId": "76561197960287930", "name": "Steve", "ticket": "<hex>"}` - both
+numbers as **decimal strings**, because a SteamID64 does not survive every JSON number path. `ticket`
+(0.1.14+, optional) is a Steam Web API ticket from the player's own Steam client
+(`SteamUser.GetAuthTicketForWebApi("driftwood")`) as hex, at most 3,000 characters. Reply
 `{"ok": true}`, always: nothing in the response varies with the claim's fate, so a probe cannot
 learn who is aboard by watching this route.
 
@@ -187,11 +189,21 @@ allowed to say:
 - claims are rate-limited and the table is bounded; a dropped claim degrades to the synthetic
   fallback, never to an unverified identity.
 
-**What this deliberately does not prove: Steam account ownership.** The server runs without a
-Steam client, so a claim asserts an id the way the game's own 1.0.4/1.0.5 join flow did - the
-client states it, nothing countersigns it. Someone who knows an absent player's SteamID64 and
-runs a modded client can claim it and inherit that saved character; that is the game's own
-historical trust model, restored, not widened. The name is display-only, sanitised, and
+**Steam account ownership (0.1.14+).** With a ticket and a Steam Web API key configured (the same
+key the name resolver uses), the server asks Steam whose ticket it is
+(`ISteamUserAuth/AuthenticateUserTicket` on api.steampowered.com, app 4001890, identity
+`driftwood`) before the claim is applied:
+
+- the ticket belongs to the claimed id: **verified**, and the id is remembered in the state
+  directory (`verified-steam-ids.txt`);
+- the ticket belongs to someone else, or Steam rejects it: **refused** (the player keeps the
+  synthetic fallback);
+- no ticket (an older app), no key (a self-hosted server without one) or Steam unreachable:
+  **unverified**, accepted under the rules above - **except** for an id this server has verified
+  before, which an unverifiable claim can no longer take.
+
+Before 0.1.14, and still for an id never verified on a server, a claim asserts an id the way the
+game's own 1.0.4/1.0.5 join flow did: the client states it, nothing countersigns it. The name is display-only, sanitised, and
 corrected by the Steam Web API resolver when a key is configured.
 
 ## `POST /api/v1/console`
