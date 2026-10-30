@@ -15,7 +15,7 @@ read as a pass for this one.
 One line: the absolute save directory the mod **actually resolved**, not the one it was asked for.
 
 ```
-C:/driftbench/i1/Saves
+C:/lab/i1/Saves
 ```
 
 ### Why this file exists

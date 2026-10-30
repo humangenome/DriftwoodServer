@@ -5,9 +5,9 @@ namespace DriftwoodServer.Tests;
 
 public class ReadinessDocumentTests
 {
-    // Verbatim from the first real run on the HTPC, 2026-08-22.
+    // Verbatim from the first real run, 2026-08-22.
     private const string Real = """
-{"schema":1,"product":"Driftwood","pluginVersion":"0.1.0","gameVersion":"1.0.4","timestampUtc":"2026-08-22T12:23:55.3545421Z","phase":"Hosting","reason":"Hosting \"Driftwood\" on port 7801","worldRunning":true,"serverStarted":true,"localClientStarted":true,"worldObjectPresent":true,"islandLoaded":true,"islandLoading":false,"port":7801,"slots":8,"transportMaxClients":9,"connectedTransportClients":1,"players":0,"worldName":"Driftwood","saveDirectory":"C:/driftbench/i1/driftwood-saves/","ghostHostSuppressed":true,"displayNamesResolved":true,"effectiveBindAddress":"0.0.0.0","effectiveTargetFrameRate":30,"swallowedTotal":0,"swallowed":[],"patchesApplied":["InstanceManager.RenderBatches"],"patchesMissing":[],"patchesFailed":[],"featuresStoodDown":[]}
+{"schema":1,"product":"Driftwood","pluginVersion":"0.1.0","gameVersion":"1.0.4","timestampUtc":"2026-08-22T12:23:55.3545421Z","phase":"Hosting","reason":"Hosting \"Driftwood\" on port 7801","worldRunning":true,"serverStarted":true,"localClientStarted":true,"worldObjectPresent":true,"islandLoaded":true,"islandLoading":false,"port":7801,"slots":8,"transportMaxClients":9,"connectedTransportClients":1,"players":0,"worldName":"Driftwood","saveDirectory":"C:/lab/i1/driftwood-saves/","ghostHostSuppressed":true,"displayNamesResolved":true,"effectiveBindAddress":"0.0.0.0","effectiveTargetFrameRate":30,"swallowedTotal":0,"swallowed":[],"patchesApplied":["InstanceManager.RenderBatches"],"patchesMissing":[],"patchesFailed":[],"featuresStoodDown":[]}
 """;
 
     [Fact]
