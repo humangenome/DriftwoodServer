@@ -26,7 +26,9 @@ while IFS= read -r -d '' artefact; do
       fail=1
     fi
   done
-done < <(find "$root" -path '*/bin/Release/*' \( -name 'Driftwood*.dll' -o -name 'Driftwood*.exe' \) -print0)
+# The test project's output is left out: it never ships, and its tests use documentation-range
+# addresses (the source scan below allows the same ranges).
+done < <(find "$root" -path '*/bin/Release/*' -not -path '*/DriftwoodServer.Tests/bin/*' \( -name 'Driftwood*.dll' -o -name 'Driftwood*.exe' \) -print0)
 
 # Source-level INTERNAL references. The `internal` pattern above was only ever applied to built
 # artefacts, so this tree could carry - and did carry, until the history scrub - panel install
