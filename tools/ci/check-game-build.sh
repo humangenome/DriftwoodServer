@@ -15,7 +15,7 @@
 # named reflection targets are listed for reading, not failed on: several are deliberate
 # old-shape/new-shape pairs (see tools/memberdiff/host-reflection-targets.txt).
 #
-# Needs the .NET 8 SDK and the game's Managed folders, which are never committed. CI cannot run it.
+# Needs the .NET 10 SDK and the game's Managed folders, which are never committed. CI cannot run it.
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 [ "$#" -ge 1 ] || { echo "usage: $0 <Managed dir> [<Managed dir> ...]" >&2; exit 2; }

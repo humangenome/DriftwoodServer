@@ -46,6 +46,7 @@ internal static class Program
             using CancellationTokenSource shutdown = new();
             ConsoleCancelEventHandler cancelHandler = (_, e) => { e.Cancel = true; shutdown.Cancel(); };
             EventHandler exitHandler = (_, _) => shutdown.Cancel();
+            using IDisposable shutdownSignals = ShutdownSignals.Register(shutdown);
             Console.CancelKeyPress += cancelHandler;
             AppDomain.CurrentDomain.ProcessExit += exitHandler;
             try

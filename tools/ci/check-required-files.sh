@@ -20,7 +20,7 @@ bad() { printf 'FAIL: %s\n' "$*"; fail=1; }
 # Anything a SERVER receives.
 server_bundle=(
   "host-mod/DriftwoodHost/bin/Release/netstandard2.1/DriftwoodHost.dll"
-  "src/DriftwoodServer/bin/Release/net8.0/DriftwoodServer.dll"
+  "src/DriftwoodServer/bin/Release/net10.0/DriftwoodServer.dll"
 )
 # Plugin projects that are deliberately NOT shipped. Listing them here is the declaration; see
 # bench/NOT-SHIPPED.md.
