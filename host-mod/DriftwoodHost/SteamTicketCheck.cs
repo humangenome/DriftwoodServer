@@ -38,7 +38,8 @@ namespace DriftwoodHost
 		{
 			steamId = 0UL;
 			detail = null;
-			if (string.IsNullOrEmpty(apiKey) || string.IsNullOrEmpty(ticketHex)) return TicketCheck.NotChecked;
+			if (string.IsNullOrEmpty(ticketHex)) return TicketCheck.NotChecked;
+			if (string.IsNullOrEmpty(apiKey)) return TicketCheck.NoKey;
 
 			lock (Sync)
 			{
@@ -88,6 +89,19 @@ namespace DriftwoodHost
 			return check;
 		}
 
+		// For a claim with no ticket on an id verified before: is Steam answering at all? A fixed
+		// ticket that can never be valid: any answer from Steam means yes. Goes through Check, so
+		// an answer is cached for a minute. Unavailable and NoKey mean the check cannot run.
+		internal const string ProbeTicket = "00000000000000000000000000000000";
+
+		internal static TicketCheck Probe(string apiKey)
+		{
+			ulong ignoredId;
+			string ignoredDetail;
+			TicketCheck check = Check(apiKey, ProbeTicket, out ignoredId, out ignoredDetail);
+			return check == TicketCheck.Unavailable || check == TicketCheck.NoKey ? check : TicketCheck.NotChecked;
+		}
+
 		private static string Fetch(string apiKey, string ticketHex)
 		{
 			// Unity's Mono answers modern TLS only when asked; asking twice is harmless.
@@ -127,6 +141,8 @@ namespace DriftwoodHost
 		internal static long Verified;
 		internal static long Unverified;
 		internal static long Refused;
+		internal static long Unchecked;
+		internal static readonly TicketBudget Budget = new TicketBudget();
 
 		internal static void Initialise(string stateDirectory)
 		{

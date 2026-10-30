@@ -127,6 +127,7 @@ namespace DriftwoodHost
 		public long IdentityVerified;
 		public long IdentityUnverified;
 		public long IdentityRefused;
+		public long IdentityUnchecked;
 		public List<string> PatchesApplied = new List<string>();
 		public List<string> PatchesMissing = new List<string>();
 		public List<string> PatchesFailed = new List<string>();
@@ -241,6 +242,7 @@ namespace DriftwoodHost
 					.Add("identityVerified", IdentityVerified)
 					.Add("identityUnverified", IdentityUnverified)
 					.Add("identityRefused", IdentityRefused)
+					.Add("identityUnchecked", IdentityUnchecked)
 					.Add("swallowedTotal", SwallowCounter.TotalSwallowed())
 					.AddRaw("swallowed", swallowJson.ToString())
 					.AddStrings("patchesApplied", PatchesApplied)

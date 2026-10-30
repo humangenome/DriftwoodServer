@@ -1,3 +1,4 @@
+using FishNet.Connection;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -859,10 +860,11 @@ namespace DriftwoodHost
 		//   - the live checks (the connection exists, is remote, plays from the same address
 		//     this socket is talking to, and the id collides with nobody aboard) run on the
 		//     main thread inside IdentityClaims.Submit;
-		//   - the answer is the same 200 {"ok":true} whether the claim was accepted, refused
-		//     or rate-dropped. The claimant does not need the answer (the synthetic fallback
-		//     keeps them playable either way) and a probe must not learn who is aboard by
-		//     watching this route's responses.
+		//   - the answer is 200 {"ok":true} for anything that has not proved a game connection,
+		//     and for refusals about who is aboard: a probe must not learn who is aboard by
+		//     watching this route's responses. A caller on its own connection also gets
+		//     "claim":"accepted" or "refused", so its app does not report a character it
+		//     did not get.
 		private void IdentityClaim(NetworkStream stream, Request request)
 		{
 			int clientId;
@@ -881,84 +883,139 @@ namespace DriftwoodHost
 			// from buying frame time with well-formed junk. Dropped claims are answered
 			// exactly like every other outcome - the client's retry cadence covers a
 			// legitimate claim that lands in a burst.
+			string claimOutcome = null;
 			if (ClaimGateAdmits())
 			{
-				// The Steam ticket check (SteamTicketRules has the why). It runs on this HTTP thread,
-				// inside the claim gate so a flood cannot spend the Web API key, and before the
-				// main-thread hop, so the game never waits on Steam.
-				string ticketHex;
-				bool ticketPresent = SteamTicketRules.TryParseTicket(JsonRead.String(request.Body, "ticket"), out ticketHex);
-				TicketCheck check = TicketCheck.NotChecked;
-				ulong checkedId = 0UL;
-				string checkDetail = null;
-				if (ticketPresent)
+				// The binding check first: only a caller holding a live game connection from this
+				// address may spend a Steam call. Anyone else gets the same answer as ever.
+				string remote = request.RemoteAddress;
+				string sanitized = name;
+				NetworkConnection bound = null;
+				int connectionKey = 0;
+				bool isBound = false;
+				string unbound = null;
+				string bindFailure;
+				bool bindRan = MainThread.Run(() =>
 				{
-					check = SteamTicketCheck.Check(SteamNameResolver.ApiKeyForTicketChecks, ticketHex, out checkedId, out checkDetail);
-				}
-				string decisionReason;
-				ClaimDecision decision = SteamTicketRules.Decide(ticketPresent, check, checkedId, steamId,
-					IdentityTicketState.Ids.Contains(steamId), out decisionReason);
+					isBound = IdentityClaims.IsBound(clientId, remote, out bound, out connectionKey, out unbound);
+				}, 5000, out bindFailure);
 
-				if (decision == ClaimDecision.Refuse)
+				if (bindRan && !isBound)
 				{
-					System.Threading.Interlocked.Increment(ref IdentityTicketState.Refused);
 					if (_claimRefusalsLogged < 10)
 					{
 						_claimRefusalsLogged++;
-						Plugin.Log?.LogInfo("Identity claim for connection " + clientId + " refused: " + decisionReason +
-							(checkDetail != null ? " (" + checkDetail + ")" : "") + "." +
+						Plugin.Log?.LogInfo("Identity claim for connection " + clientId + " refused: " + unbound + "." +
 							(_claimRefusalsLogged == 10 ? " Further refusals will not be logged." : ""));
 					}
 				}
+				else if (!bindRan)
+				{
+					Plugin.Log?.LogDebug("Identity claim could not run: " + bindFailure);
+				}
 				else
 				{
-					string remote = request.RemoteAddress;
-					string sanitized = name;
-					bool accepted = false;
-					string refusal = null;
-					string failure;
-					bool ran = MainThread.Run(() =>
+					// The Steam ticket check (SteamTicketRules has the why). It runs on this HTTP
+					// thread, before the main-thread claim, so the game never waits on Steam.
+					string ticketHex;
+					bool ticketPresent = SteamTicketRules.TryParseTicket(JsonRead.String(request.Body, "ticket"), out ticketHex);
+					bool previouslyVerified = IdentityTicketState.Ids.Contains(steamId);
+					string apiKey = SteamNameResolver.ApiKeyForTicketChecks;
+					TicketCheck check = TicketCheck.NotChecked;
+					ulong checkedId = 0UL;
+					string checkDetail = null;
+					if (ticketPresent)
 					{
-						string reason;
-						accepted = IdentityClaims.Submit(clientId, steamId, sanitized, remote, out reason);
-						refusal = reason;
-					}, 5000, out failure);
-					if (ran && accepted)
+						check = string.IsNullOrEmpty(apiKey) ? TicketCheck.NoKey
+							: IdentityTicketState.Budget.TryTake(connectionKey, ticketHex, DateTime.UtcNow)
+								? SteamTicketCheck.Check(apiKey, ticketHex, out checkedId, out checkDetail)
+								: TicketCheck.OverBudget;
+					}
+					else if (previouslyVerified)
 					{
-						if (decision == ClaimDecision.AcceptVerified)
+						// No ticket for a known id: the spoof, unless Steam itself is down (a Steam
+						// client with no connection cannot make a ticket either). Ask only here, so
+						// an older app on a new id costs no Steam call.
+						check = string.IsNullOrEmpty(apiKey) ? TicketCheck.NoKey
+							: IdentityTicketState.Budget.TryTake(connectionKey, SteamTicketCheck.ProbeTicket, DateTime.UtcNow)
+								? SteamTicketCheck.Probe(apiKey)
+								: TicketCheck.OverBudget;
+					}
+					string decisionReason;
+					ClaimNotice notice;
+					ClaimDecision decision = SteamTicketRules.Decide(ticketPresent, check, checkedId, steamId, previouslyVerified,
+						IdentityTicketState.Ids.IsLastVerifiedAddress(steamId, remote), out decisionReason, out notice);
+
+					if (decision == ClaimDecision.Refuse)
+					{
+						System.Threading.Interlocked.Increment(ref IdentityTicketState.Refused);
+						claimOutcome = "refused";
+						if (_claimRefusalsLogged < 10)
 						{
-							System.Threading.Interlocked.Increment(ref IdentityTicketState.Verified);
-							if (IdentityTicketState.Ids.Add(steamId))
+							_claimRefusalsLogged++;
+							Plugin.Log?.LogInfo("Identity claim for connection " + clientId + " refused: " + decisionReason +
+								(checkDetail != null ? " (" + checkDetail + ")" : "") + "." +
+								(_claimRefusalsLogged == 10 ? " Further refusals will not be logged." : ""));
+						}
+						NetworkConnection refusedConnection = bound;
+						string noticeFailure;
+						MainThread.Run(() => ClaimNotices.Queue(refusedConnection, notice), 5000, out noticeFailure);
+					}
+					else
+					{
+						bool accepted = false;
+						string refusal = null;
+						string failure;
+						bool ran = MainThread.Run(() =>
+						{
+							string reason;
+							accepted = IdentityClaims.Submit(clientId, steamId, sanitized, remote, out reason);
+							refusal = reason;
+						}, 5000, out failure);
+						if (ran && accepted)
+						{
+							claimOutcome = "accepted";
+							if (decision == ClaimDecision.AcceptVerified)
 							{
-								Plugin.Log?.LogInfo("Identity claim for connection " + clientId + " verified by Steam; from now on this server refuses unverified claims for that player.");
+								System.Threading.Interlocked.Increment(ref IdentityTicketState.Verified);
+								if (IdentityTicketState.Ids.Remember(steamId, remote))
+								{
+									Plugin.Log?.LogInfo("Identity claim for connection " + clientId + " verified by Steam; from now on this server refuses unverified claims for that player.");
+								}
+							}
+							else
+							{
+								if (decision == ClaimDecision.AcceptUnchecked) System.Threading.Interlocked.Increment(ref IdentityTicketState.Unchecked);
+								else System.Threading.Interlocked.Increment(ref IdentityTicketState.Unverified);
+								if (_claimUnverifiedLogged < 10)
+								{
+									_claimUnverifiedLogged++;
+									Plugin.Log?.LogInfo("Identity claim for connection " + clientId + " accepted " + decisionReason +
+										(checkDetail != null ? " (" + checkDetail + ")" : "") + "." +
+										(_claimUnverifiedLogged == 10 ? " Further unverified claims will not be logged." : ""));
+								}
 							}
 						}
-						else
+						else if (ran && !accepted && refusal != null && _claimRefusalsLogged < 10)
 						{
-							System.Threading.Interlocked.Increment(ref IdentityTicketState.Unverified);
-							if (_claimUnverifiedLogged < 10)
-							{
-								_claimUnverifiedLogged++;
-								Plugin.Log?.LogInfo("Identity claim for connection " + clientId + " accepted " + decisionReason +
-									(checkDetail != null ? " (" + checkDetail + ")" : "") + "." +
-									(_claimUnverifiedLogged == 10 ? " Further unverified claims will not be logged." : ""));
-							}
+							_claimRefusalsLogged++;
+							Plugin.Log?.LogInfo("Identity claim for connection " + clientId + " refused: " + refusal + "." +
+								(_claimRefusalsLogged == 10 ? " Further refusals will not be logged." : ""));
 						}
-					}
-					else if (ran && !accepted && refusal != null && _claimRefusalsLogged < 10)
-					{
-						_claimRefusalsLogged++;
-						Plugin.Log?.LogInfo("Identity claim for connection " + clientId + " refused: " + refusal + "." +
-							(_claimRefusalsLogged == 10 ? " Further refusals will not be logged." : ""));
-					}
-					else if (!ran)
-					{
-						Plugin.Log?.LogDebug("Identity claim could not run: " + failure);
+						else if (!ran)
+						{
+							Plugin.Log?.LogDebug("Identity claim could not run: " + failure);
+						}
 					}
 				}
 			}
 
-			Write(stream, 200, "application/json", Json.Object().Add("ok", true).Close());
+			// The same {"ok":true} as ever for anyone who has not proved a game connection, and for
+			// the aboard-or-not refusals inside Submit, so a probe still learns nothing about who is
+			// aboard. A caller on its own connection also hears how its ticket check went.
+			Write(stream, 200, "application/json", claimOutcome == null
+				? Json.Object().Add("ok", true).Close()
+				: Json.Object().Add("ok", true).Add("claim", claimOutcome).Close());
 		}
 
 		private static readonly object ClaimGateSync = new object();

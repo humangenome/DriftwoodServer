@@ -687,6 +687,8 @@ namespace DriftwoodHost
 				// already knows who is connected.
 				SteamNameResolver.Request(rosterIds);
 				OwnerActions.EnforceBlocklist();
+				// A refused identity claim is told why once the player is in the world.
+				ClaimNotices.Service();
 				// Hygiene, not correctness: a claim outliving its connection is already
 				// inert (IdentityClaims binds to the connection object), this just keeps
 				// the table from carrying dead entries.
@@ -750,6 +752,7 @@ namespace DriftwoodHost
 				_readiness.IdentityVerified = System.Threading.Interlocked.Read(ref IdentityTicketState.Verified);
 				_readiness.IdentityUnverified = System.Threading.Interlocked.Read(ref IdentityTicketState.Unverified);
 				_readiness.IdentityRefused = System.Threading.Interlocked.Read(ref IdentityTicketState.Refused);
+				_readiness.IdentityUnchecked = System.Threading.Interlocked.Read(ref IdentityTicketState.Unchecked);
 			}
 			catch (Exception exception)
 			{

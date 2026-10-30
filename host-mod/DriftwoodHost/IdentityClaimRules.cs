@@ -110,6 +110,13 @@ namespace DriftwoodHost
 			return Canonical(transport).Equals(Canonical(http));
 		}
 
+		// The one text form of an address, for comparing across joins. Null when unreadable.
+		public static string CanonicalAddress(string value)
+		{
+			IPAddress parsed = ParseHost(value);
+			return parsed == null ? null : Canonical(parsed).ToString();
+		}
+
 		private static IPAddress Canonical(IPAddress address)
 		{
 			// The same machine can present as 1.2.3.4 on UDP and ::ffff:1.2.3.4 on
