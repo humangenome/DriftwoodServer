@@ -870,9 +870,9 @@ namespace DriftwoodHost
 				}
 				if (crewWarned) yield return new WaitForSecondsRealtime(1.5f);
 
-				// Save explicitly, then let the game quit cleanly - SaveManager.OnApplicationQuit
-				// saves again on the way out, and Server.OnStopServer saves once more when the
-				// server connection stops. Three chances, one of which does not depend on us.
+				// Save explicitly, then let the game quit cleanly - Server.OnStopServer saves once
+				// more when the server connection stops (SaveManager.OnApplicationQuit is empty on
+				// 1.1.3). Two chances, one of which does not depend on us.
 				//
 				// Nothing in this block may be allowed to throw past Application.Quit. A stop that
 				// silently fails to stop is worse than a stop that fails to save: the supervisor

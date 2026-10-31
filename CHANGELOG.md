@@ -2,6 +2,20 @@
 
 All notable changes to DriftwoodServer are recorded here.
 
+## [Unreleased]
+
+### Fixed
+
+- **Restoring the oldest of 20 snapshots deleted it.** The backup taken just before a restore pushed the oldest snapshot out before it was read, so the restore failed and that snapshot was gone. The snapshot being restored is now read first and kept.
+- **A restore that failed part way could start the server on an empty world.** The old world is now moved aside and put back if anything goes wrong, the restore is tried again at the next start, and if the old world cannot be put back the server refuses to host instead of making a new world over it.
+- **"Saved" was reported for saves that did not happen.** The game skips a save when no world is loaded and hides a failed file write, and the server passed both on as saved to the console, the status port and backups. A save now counts only when the world file holds it.
+- **A busy moment could stop the status file updating for good.** Writing it could fail while something was reading it, which stopped the player list, block sweeps and Discord alerts until a restart, or skipped the save on stop. The leaderboard, block list and other state files are now replaced in one step, so a crash mid-write no longer empties them.
+- **A console command that timed out could still happen later.** A `money`, `spawn`, `kick` or `block` that answered "did not respond" now never runs afterwards.
+
+### Docs
+
+- Self-hosting: the supervisor's own refusals are in `status.json`, not `host-ready.json`; after a restore, start the server again; settings are changed in `appsettings.json` because the host's config file is rewritten on every start; a block cannot match a player whose app sends no identity claim; the API secret's key is `[Http] Password`; `IdleFrameRate` added to the config reference.
+
 ## [0.1.13] - 2026-10-27
 
 ### Fixed

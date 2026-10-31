@@ -34,8 +34,8 @@ X-Driftwood-Signature: hex(HMACSHA256(sha256(AuthToken), "METHOD\n<path>\n<ts>\n
 - `<path>` is the URL path only — no host, no query string.
 - Signatures older or newer than **300 seconds** are refused, and each signature is accepted **once**
   (replay guard). Without that, anyone who captured one `restore` request could roll a world back.
-- `AuthToken` is the server's API secret, written by the hosting endpoint into
-  `[Server] AuthToken`. An empty token makes every signed route refuse — fail-closed, and
+- `AuthToken` is the server's API secret, written into `[Http] Password` (older names such as
+  `[Server] AuthToken` are still read). An empty token makes every signed route refuse — fail-closed, and
   logged loudly at boot.
 - **Declared body hash (0.1.11).** A signed request may also send
   `X-Driftwood-Content-Sha256: <sha256hex(body)>`. The host then checks the signature over that
@@ -223,7 +223,9 @@ rescue  top
 - `block <SteamID64 or name>` adds them to the server's block list, removes them if connected, and
   keeps them out (a sweep on the roster sampler removes a blocked player within ~2 seconds of
   connecting — the game offers no earlier hook that already knows the SteamID). `unblock <id>`
-  reverses it; `blocked` lists entries. **Blocks key on the SteamID64, never the name.** The list
+  reverses it; `blocked` lists entries. **Blocks key on the SteamID64, never the name.** A player
+  whose client sends no identity claim (a Driftwood app older than 0.1.4) has only a per-connection id,
+  so a block cannot match them. The list
   lives under the instance root (`Driftwood\blocklist.txt`), outside the game tree and outside
   `Saves\`, so a validate cannot clear a ban and a world restore cannot roll one back. `ban` /
   `unban` / `banlist` are accepted aliases.
@@ -369,9 +371,10 @@ The newest 20 are kept.
   1. snapshot what is there now, so a restore is never a one-way door;
   2. extract into a staging directory, so a corrupt archive cannot half-replace a live world;
   3. reconcile the world **name** (below);
-  4. swap the staged tree in;
-  5. answer `{"ok":true}`, **then end the process** so the supervisor brings the world back on the
-     restored save.
+  4. answer `{"ok":true}`, **then end the process**;
+  5. at the next start, before the world loads, swap the staged tree in. The old world is moved aside
+     first and put back if any step fails; a swap that cannot put it back refuses to host instead of
+     creating an empty world. (Swapping before the process ended was undone by the game's own saves.)
 
 **The world-name trap.** The world a server loads is `Saves\<WorldName>.txt` and `WorldName` comes
 from the panel, not from the archive. Restore somebody's `MyIsland.txt` onto a server configured for
@@ -386,8 +389,8 @@ outside it refuses the whole archive.
 
 ## The supervisor dependency, stated plainly
 
-Restore needs the process to end and be brought back. Both candidate supervisors (the inline
-PowerShell loop that runs in production today, and the unshipped .NET `DriftwoodServer`) relaunch a
-host that exits — that is what a supervisor is — so the dependency is on the property, not on which
-one wins. **Everything else in this API is independent of the open S1 question**, which is why the
+Restore needs the process to end and be brought back. The hosting panel starts it again. The .NET
+`DriftwoodServer` supervisor in this repo does not: it records "stopped unexpectedly" and exits, so on a
+self-hosted server run the start command again after a restore, and the staged world is put in place
+at that start. **Everything else in this API is independent of the open S1 question**, which is why the
 API lives in the mod: the mod is the component that is definitely on the fleet.

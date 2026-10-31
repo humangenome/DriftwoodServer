@@ -42,6 +42,7 @@ HostMode = true                ; a locked invariant; false is warned about and i
 CountHostPlayer = false
 SuppressGhostHost = true
 TargetFrameRate = 0            ; 0 = uncapped. Worth nothing on this game (see the resource profile)
+IdleFrameRate = 5              ; frame rate while nobody is connected; 0 = off. The biggest idle saving
 
 [Http]
 Port = 22004                   ; gameplay port + 1
