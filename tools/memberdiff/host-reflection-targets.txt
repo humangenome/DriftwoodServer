@@ -8,6 +8,9 @@ SaveManager:method:CreateServer
 SaveManager:method:OnServerLoaded
 SaveManager:method:SaveServer:1
 SaveManager:method:get_CurServerSave
+SaveSystem:field:_extension
+SaveManager/ServerSaveObject:field:LastSave
+SaveManager/ServerSaveObject:field:Name
 AutoSaver:field:_intervalInMinutes
 ServerSettings:method:ToggleFriendlyFire
 ServerSettings:method:get_OneShotEnabled

@@ -88,9 +88,16 @@ namespace DriftwoodHost
 				case "save":
 				{
 					string failure;
-					if (!MainThread.Run(WorldLifecycle.SaveNow, 15000, out failure))
+					string detail = null;
+					SaveOutcome outcome = SaveOutcome.Failed;
+					if (!MainThread.Run(() => { outcome = WorldLifecycle.SaveWorld(out detail); }, 15000, out failure))
 					{
 						output = "the world was NOT saved: " + failure;
+						return false;
+					}
+					if (outcome != SaveOutcome.Saved)
+					{
+						output = "the world was NOT saved: " + detail;
 						return false;
 					}
 					output = "world saved";

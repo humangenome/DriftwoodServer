@@ -7,6 +7,13 @@ using UnityEngine;
 
 namespace DriftwoodHost
 {
+	internal enum SaveOutcome
+	{
+		Saved,
+		NothingToSave,
+		Failed
+	}
+
 	// PERSISTENCE, AND THE SILENT-FAILURE LANDMINE UNDER IT.
 	//
 	// SaveManager.SaveServer() opens with:
@@ -371,29 +378,128 @@ namespace DriftwoodHost
 		// that arrives before the world has finished coming up. An exception escaping here would
 		// kill the coroutine that calls Application.Quit, leaving the server hung until something
 		// force-kills it, which is the worst possible outcome for a save routine.
+		//
+		// True only for a save that really landed (audit 2026-10-30). The game's SaveServer
+		// returns without a word when no world is up, and its SaveSystem.SaveServer catches a
+		// failed write (disk full, locked file, failed validation) and only logs it, so "the call
+		// did not throw" used to be reported as "saved" to the panel, the console and snapshots.
 		internal static bool SaveNow()
 		{
+			string detail;
+			return SaveWorld(out detail) == SaveOutcome.Saved;
+		}
+
+		// For a snapshot: a world that is not loaded has nothing in memory, so the files on disk
+		// are the world and are safe to archive. Any other failure refuses the snapshot.
+		internal static bool FlushForSnapshot()
+		{
+			string detail;
+			SaveOutcome outcome = SaveWorld(out detail);
+			return outcome == SaveOutcome.Saved || outcome == SaveOutcome.NothingToSave;
+		}
+
+		internal static SaveOutcome SaveWorld(out string detail)
+		{
+			detail = null;
 			try
 			{
 				Type saveManager = AccessTools.TypeByName("SaveManager");
 				MethodInfo save = saveManager == null ? null : AccessTools.Method(saveManager, "SaveServer");
 				if (save == null)
 				{
+					detail = "the game's save routine could not be found";
 					Plugin.Log?.LogError("The game's save routine could not be found, so nothing was saved.");
-					return false;
+					return SaveOutcome.Failed;
 				}
+
+				// The game's own guard, read first: no world selected, or the server not up.
+				PropertyInfo current = AccessTools.Property(saveManager, "CurServerSave");
+				object before = current?.GetValue(null, null);
+				bool serverUp = Server.Instance != null && Server.Instance.IsServerInitialized;
+				if (current != null && (before == null || !serverUp))
+				{
+					detail = "no world is loaded, so there was nothing in memory to save";
+					Plugin.Log?.LogInfo("Save requested while no world is loaded; the files on disk are the world.");
+					return SaveOutcome.NothingToSave;
+				}
+				long ticksBefore = ReadLastSave(before);
+
 				save.Invoke(null, new object[] { true });
-				return true;
+
+				// The game builds a new save object with a fresh LastSave before it writes. If that
+				// did not happen, it returned early.
+				object after = current?.GetValue(null, null);
+				long ticksAfter = ReadLastSave(after);
+				if (current == null || ticksAfter == long.MinValue)
+				{
+					// A build where these fields moved: keep the old meaning rather than refuse every save.
+					WarnOnceCannotConfirm("the save object's fields have moved");
+					return SaveOutcome.Saved;
+				}
+				if (after == null || ticksAfter == ticksBefore)
+				{
+					detail = "the game's save routine returned without saving";
+					Plugin.Log?.LogError("The game's save routine returned without saving the world.");
+					return SaveOutcome.Failed;
+				}
+
+				// Then check the file on disk holds that save. The write is the step the game
+				// swallows failures in.
+				string path = WorldFilePath(after);
+				if (path == null)
+				{
+					WarnOnceCannotConfirm("the world file's location could not be read");
+					return SaveOutcome.Saved;
+				}
+				string marker = "\"LastSave\":" + ticksAfter.ToString(System.Globalization.CultureInfo.InvariantCulture);
+				if (!File.Exists(path) || File.ReadAllText(path).IndexOf(marker, StringComparison.Ordinal) < 0)
+				{
+					detail = "the game could not write the world file (its own log says why)";
+					Plugin.Log?.LogError("The game prepared a save but the world file " + path +
+						" does not hold it, so the write failed. The game log has the reason.");
+					return SaveOutcome.Failed;
+				}
+				return SaveOutcome.Saved;
 			}
 			catch (Exception exception)
 			{
 				Exception inner = exception is TargetInvocationException invocation && invocation.InnerException != null
 					? invocation.InnerException
 					: exception;
+				detail = "the game's save routine threw (" + inner.GetType().Name + ")";
 				Plugin.Log?.LogError("The game's save routine threw (" + inner.GetType().Name + ": " + inner.Message +
 					"). This usually means the world had not finished loading. Nothing was saved.");
-				return false;
+				return SaveOutcome.Failed;
 			}
+		}
+
+		private static bool _warnedCannotConfirm;
+
+		private static void WarnOnceCannotConfirm(string why)
+		{
+			if (_warnedCannotConfirm) return;
+			_warnedCannotConfirm = true;
+			Plugin.Log?.LogWarning("Saves are reported as done without checking the world file, because " + why + " on this game build.");
+		}
+
+		private static long ReadLastSave(object saveObject)
+		{
+			if (saveObject == null) return long.MinValue + 1;
+			FieldInfo field = AccessTools.Field(saveObject.GetType(), "LastSave");
+			if (field == null) return long.MinValue;
+			object value = field.GetValue(saveObject);
+			return value is long ticks ? ticks : long.MinValue;
+		}
+
+		private static string WorldFilePath(object saveObject)
+		{
+			Type saveSystem = _saveSystem ?? AccessTools.TypeByName("SaveSystem");
+			if (saveSystem == null || saveObject == null) return null;
+			string folder = saveSystem.GetField("_saveFolder", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(null) as string;
+			string extension = saveSystem.GetField("_extension", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(null) as string;
+			string name = AccessTools.Field(saveObject.GetType(), "Name")?.GetValue(saveObject) as string;
+			if (string.IsNullOrEmpty(folder) || string.IsNullOrEmpty(name)) return null;
+			return Path.Combine(folder, name + (extension ?? ".txt"));
 		}
 	}
 }

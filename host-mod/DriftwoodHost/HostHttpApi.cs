@@ -670,9 +670,12 @@ namespace DriftwoodHost
 				case "/api/v1/save":
 				{
 					string failure;
-					bool saved = MainThread.Run(WorldLifecycle.SaveNow, 15000, out failure);
+					string detail = null;
+					SaveOutcome outcome = SaveOutcome.Failed;
+					bool ran = MainThread.Run(() => { outcome = WorldLifecycle.SaveWorld(out detail); }, 15000, out failure);
+					bool saved = ran && outcome == SaveOutcome.Saved;
 					Write(stream, saved ? 200 : 500, "application/json",
-						Json.Object().Add("saved", saved).Add("error", saved ? null : failure).Close());
+						Json.Object().Add("saved", saved).Add("error", saved ? null : (ran ? detail : failure)).Close());
 					return;
 				}
 
