@@ -9,7 +9,7 @@
   <a href="#what-you-need"><img src="https://img.shields.io/badge/Platform-Windows_x64-blue.svg" alt="Platform"></a>
   <a href="https://store.steampowered.com/app/4001890/"><img src="https://img.shields.io/badge/Game-How_to_Fish-4aa3df.svg" alt="Game"></a>
   <a href="https://github.com/HumanGenome/Driftwood"><img src="https://img.shields.io/badge/Player_App-Driftwood-444.svg" alt="Player App"></a>
-  <a href="https://dotnet.microsoft.com/download/dotnet/8.0"><img src="https://img.shields.io/badge/.NET-8.0-blueviolet.svg" alt=".NET 8"></a>
+  <a href="https://dotnet.microsoft.com/download/dotnet/10.0"><img src="https://img.shields.io/badge/.NET-10.0-blueviolet.svg" alt=".NET 10"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
 </p>
 
@@ -46,7 +46,7 @@ Optional (`pauseWorldWhenEmpty`). With nobody on, the world stands still and the
 
 - Windows 10, 11 or Server, x64
 - Your own Steam copy of How to Fish, installed. The server runs the game's files, and this repo ships none of them. Release 0.1.13 hosts game 1.1.x (tested on 1.1.3); releases before 0.1.9 do not start on 1.1.x.
-- [Git](https://git-scm.com/downloads) and the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0), both free, used once in step 4
+- [Git](https://git-scm.com/downloads) and the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0), both free, used once in step 4
 - Two open ports: one UDP port for the game, plus the TCP port directly above it
 
 ## Set it up
@@ -191,7 +191,7 @@ The settings you are most likely to change, in `appsettings.json`. Every setting
 
 ## Build from source
 
-The supervisor builds with the .NET 8 SDK (step 4). The tests:
+The supervisor builds with the .NET 10 SDK (step 4). The tests:
 
 ```powershell
 dotnet test src/DriftwoodServer.Tests/DriftwoodServer.Tests.csproj -c Release
