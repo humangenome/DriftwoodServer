@@ -122,6 +122,14 @@ namespace DriftwoodHost
 		// worst possible failure for a backup because it only shows up when it is restored.
 		internal static bool Create(string reason, out string id, out string failure)
 		{
+			return Create(reason, out id, out failure, null);
+		}
+
+		// keepId: a snapshot Prune must not delete in this call. A restore passes the archive it is
+		// restoring from: with 20 snapshots stored, the pre-restore copy made 21 and Prune deleted
+		// the oldest, so restoring the oldest snapshot deleted it and then failed (audit 2026-10-30).
+		internal static bool Create(string reason, out string id, out string failure, string keepId)
+		{
 			id = string.Empty;
 			failure = null;
 			if (!Ready)
@@ -131,7 +139,7 @@ namespace DriftwoodHost
 			}
 
 			string saveFailure;
-			if (!MainThread.Run(WorldLifecycle.SaveNow, 15000, out saveFailure))
+			if (!MainThread.Run(WorldLifecycle.FlushForSnapshot, 15000, out saveFailure))
 			{
 				// Refuse rather than snapshot anyway. An unflushed snapshot is the stale-archive
 				// trap above, and a customer who is told "could not save" will retry; one handed
@@ -161,7 +169,7 @@ namespace DriftwoodHost
 					failure = exception.GetType().Name + ": " + exception.Message;
 					return false;
 				}
-				Prune();
+				Prune(keepId);
 			}
 			Plugin.Log?.LogInfo("World snapshot " + id + " taken (" + reason + ").");
 			return true;
@@ -240,7 +248,7 @@ namespace DriftwoodHost
 					failure = exception.GetType().Name + ": " + exception.Message;
 					return false;
 				}
-				Prune();
+				Prune(null);
 			}
 			return true;
 		}
@@ -283,17 +291,8 @@ namespace DriftwoodHost
 
 			lock (Sync)
 			{
-				string preId;
-				string preFailure;
-				if (!Create("pre-restore", out preId, out preFailure))
-				{
-					// A world that cannot be saved is a world we cannot safely replace: without
-					// the pre-restore copy the customer has no way back if the archive turns out
-					// to be the wrong one.
-					failure = "the current world could not be backed up first (" + preFailure + ")";
-					return false;
-				}
-
+				// Extract first: a corrupt archive is caught before anything else happens, and the
+				// archive is read before the pre-restore copy below can count towards the limit.
 				string pending = PendingDirectory;
 				try
 				{
@@ -303,6 +302,29 @@ namespace DriftwoodHost
 					System.IO.Directory.CreateDirectory(pending);
 					if (!Extract(archivePath, pending, out failure)) { Discard(pending); return false; }
 					if (!ReconcileWorldName(pending, out failure)) { Discard(pending); return false; }
+				}
+				catch (Exception exception)
+				{
+					failure = exception.GetType().Name + ": " + exception.Message;
+					Discard(pending);
+					return false;
+				}
+
+				string preId;
+				string preFailure;
+				if (!Create("pre-restore", out preId, out preFailure, id))
+				{
+					// A world that cannot be saved is a world we cannot safely replace: without
+					// the pre-restore copy the customer has no way back if the archive turns out
+					// to be the wrong one.
+					failure = "the current world could not be backed up first (" + preFailure + ")";
+					Discard(pending);
+					return false;
+				}
+
+				try
+				{
+					// The marker last: it is what makes the next boot apply the staged world.
 					File.WriteAllText(Path.Combine(pending, MarkerName), id);
 				}
 				catch (Exception exception)
@@ -335,9 +357,12 @@ namespace DriftwoodHost
 			catch { id = string.Empty; }
 			if (id.Length == 0) id = "(unnamed)";
 
+			WorldSwapResult result;
+			string swapFailure;
 			try
 			{
-				try { File.Delete(marker); } catch { }
+				// The marker stays until the swap has worked, so a swap that fails is tried again at
+				// the next start instead of being forgotten with its staged files.
 				// Re-run the reconcile against the world name THIS boot is configured for. The
 				// panel can change the world name between the restore being staged and the
 				// server coming back, and a staged file named for the old world would restore
@@ -351,15 +376,31 @@ namespace DriftwoodHost
 					_pendingId = id;
 					return null;
 				}
-				SwapIn(pending);
+				result = WorldSwap.Apply(pending, _saveDirectory, out swapFailure);
 			}
 			catch (Exception exception)
 			{
 				Plugin.Log?.LogError("A staged world restore (" + id + ") could not be applied: " +
-					exception.GetType().Name + ": " + exception.Message);
+					exception.GetType().Name + ": " + exception.Message + ". The world on disk has NOT been changed.");
 				_pendingId = id;
 				return null;
 			}
+			if (result == WorldSwapResult.Untouched)
+			{
+				Plugin.Log?.LogError("A staged world restore (" + id + ") could not be applied: " + swapFailure +
+					". The world on disk has NOT been changed; the restore is tried again at the next start.");
+				_pendingId = id;
+				return null;
+			}
+			if (result == WorldSwapResult.Broken)
+			{
+				_pendingId = id;
+				BrokenRestore = "a world restore (" + id + ") failed part way: " + swapFailure +
+					". Hosting now would create an empty world over it. The world from before the restore is also in the newest pre-restore snapshot";
+				Plugin.Log?.LogError("A staged world restore " + BrokenRestore + ".");
+				return null;
+			}
+			try { File.Delete(marker); } catch { }
 			Discard(pending);
 			_pendingId = string.Empty;
 			Plugin.Log?.LogWarning("World restored from snapshot " + id + " before loading. This server is now running the restored world.");
@@ -369,6 +410,10 @@ namespace DriftwoodHost
 		// Non-empty while a restore has been staged and not yet applied. Published on /status
 		// so a restore that is waiting for a start the supervisor never made is visible to the
 		// panel rather than being a world that quietly did not change.
+		// Set when a staged restore failed part way and the save folder may hold neither world.
+		// Plugin refuses to host while it is set (see ApplyPending).
+		internal static string BrokenRestore { get; private set; }
+
 		internal static string PendingRestoreId
 		{
 			get { return _pendingId ?? string.Empty; }
@@ -441,19 +486,6 @@ namespace DriftwoodHost
 				: "that archive contains " + worlds.Count + " worlds and none of them is \"" + target +
 					"\", so this server cannot tell which one to load";
 			return false;
-		}
-
-		private static void SwapIn(string staging)
-		{
-			System.IO.Directory.CreateDirectory(_saveDirectory);
-			foreach (string file in System.IO.Directory.GetFiles(_saveDirectory))
-			{
-				try { File.Delete(file); } catch { }
-			}
-			foreach (string file in System.IO.Directory.GetFiles(staging))
-			{
-				File.Copy(file, Path.Combine(_saveDirectory, Path.GetFileName(file)), true);
-			}
 		}
 
 		// ------------------------------------------------------------------
@@ -529,13 +561,16 @@ namespace DriftwoodHost
 		// ------------------------------------------------------------------
 		// Bookkeeping
 		// ------------------------------------------------------------------
-		private static void Prune()
+		private static void Prune(string keepId)
 		{
 			try
 			{
 				List<Summary> all = List();
-				for (int i = KeepNewest; i < all.Count; i++)
+				int kept = 0;
+				for (int i = 0; i < all.Count; i++)
 				{
+					if (!string.IsNullOrEmpty(keepId) && string.Equals(all[i].Id, keepId, StringComparison.Ordinal)) continue;
+					if (kept++ < KeepNewest) continue;
 					string path = Path.Combine(_snapshotDirectory, all[i].Id + ".zip");
 					try { File.Delete(path); } catch { }
 				}

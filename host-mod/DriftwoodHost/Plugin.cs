@@ -187,6 +187,11 @@ namespace DriftwoodHost
 			// this fixes: the game's own SaveManager.OnApplicationQuit wrote the live world
 			// straight back over the restored files and the restore was silently a no-op.
 			SnapshotStore.ApplyPending();
+			if (SnapshotStore.BrokenRestore != null)
+			{
+				Refuse("This server will not host because " + SnapshotStore.BrokenRestore + ".");
+				return;
+			}
 
 			// The owner layer, in dependency order: the audit record first (so even an
 			// enforcement that fires during boot can be recorded), then the block list it
