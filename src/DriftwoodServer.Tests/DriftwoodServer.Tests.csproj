@@ -56,6 +56,12 @@
          of a body is read before the caller has proved anything. Socket-free on purpose, so the
          order "headers, then body" is proven here and not only on a canary. -->
     <Compile Include="../../host-mod/DriftwoodHost/ApiGate.cs" Link="Linked/ApiGate.cs" />
+    <!-- File safety, linked since 2026-10-30: the one-step replace every state file now uses, the
+         restore swap that leaves either the old world or the new one, and the main-thread queue
+         whose timed-out requests must never run late. None binds Unity, BepInEx or a game type. -->
+    <Compile Include="../../host-mod/DriftwoodHost/HostFiles.cs" Link="Linked/HostFiles.cs" />
+    <Compile Include="../../host-mod/DriftwoodHost/WorldSwap.cs" Link="Linked/WorldSwap.cs" />
+    <Compile Include="../../host-mod/DriftwoodHost/MainThread.cs" Link="Linked/MainThread.cs" />
   </ItemGroup>
   <PropertyGroup>
     <NoWarn>$(NoWarn);CS8618;CS8600;CS8601;CS8602;CS8603;CS8604;CS8625</NoWarn>
