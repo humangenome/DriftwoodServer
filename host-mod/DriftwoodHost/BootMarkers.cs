@@ -62,8 +62,7 @@ namespace DriftwoodHost
 			{
 				Directory.CreateDirectory(LogsDirectory);
 				File.WriteAllText(temporary, content, new UTF8Encoding(false));
-				if (File.Exists(path)) File.Delete(path);
-				File.Move(temporary, path);
+				HostFiles.ReplaceWith(temporary, path);
 			}
 			catch (Exception exception)
 			{
