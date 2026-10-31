@@ -880,9 +880,15 @@ namespace DriftwoodHost
 				// one path that skips the game's own quit-time save as well.
 				try
 				{
-					if (!WorldLifecycle.SaveNow())
+					string saveDetail;
+					SaveOutcome saveOutcome = WorldLifecycle.SaveWorld(out saveDetail);
+					if (saveOutcome == SaveOutcome.Failed)
 					{
-						Logger.LogError("Could not run the game's save routine on shutdown.");
+						Logger.LogError("The world was not saved on shutdown: " + saveDetail + ".");
+					}
+					else if (saveOutcome == SaveOutcome.NothingToSave)
+					{
+						Logger.LogInfo("Shutting down before a world was loaded; nothing in memory to save.");
 					}
 				}
 				catch (Exception exception)
