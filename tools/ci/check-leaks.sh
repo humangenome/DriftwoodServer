@@ -31,14 +31,20 @@ clone='stormforge|Stormforge|lodestone|Lodestone|delverium|Delverium|witchspire|
 # check ran green over a DriftwoodHost.dll that contained "SurvivalServers control panel" twice.
 # An ASCII-only scan of a managed binary is not a weak check, it is a blind one.
 artefact_strings() { { strings -a "$1"; strings -a -e l "$1"; }; }
+# Loopback and documentation-range addresses are not leaks (the tests use them on purpose), the same
+# exclusion the source check below makes. The whole stream is read (no grep -q): under pipefail an
+# early exit lets the writer die on a broken pipe, and then this check passed on a match.
+not_real_address='(127\.0\.0\.1|0\.0\.0\.0|localhost|203\.0\.113\.[0-9]{1,3}|198\.51\.100\.[0-9]{1,3}|192\.0\.2\.[0-9]{1,3}):'
+artefact_hits() { artefact_strings "$1" | grep -aE "$2" | grep -avE "$not_real_address" || true; }
 while IFS= read -r -d '' artefact; do
   for pattern in "$internal" "$clone"; do
-    if artefact_strings "$artefact" | grep -aEq "$pattern"; then
+    hits="$(artefact_hits "$artefact" "$pattern")"
+    if [ -n "$hits" ]; then
       if [ "$pattern" = "$internal" ]; then
-        printf 'FAIL: %s contains %s internal string(s) (named words or an address; text not printed)\n' "$artefact" "$(artefact_strings "$artefact" | grep -aEc "$pattern")"
+        printf 'FAIL: %s contains %s internal string(s) (named words or an address; text not printed)\n' "$artefact" "$(printf '%s\n' "$hits" | wc -l)"
       else
         printf 'FAIL: %s contains a forbidden string matching /%s/\n' "$artefact" "$pattern"
-        artefact_strings "$artefact" | grep -aE "$pattern" | sort -u | head -5 | sed 's/^/    /'
+        printf '%s\n' "$hits" | sort -u | head -5 | sed 's/^/    /'
       fi
       fail=1
     fi
