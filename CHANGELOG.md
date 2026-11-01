@@ -2,11 +2,20 @@
 
 All notable changes to DriftwoodServer are recorded here.
 
-## [Unreleased]
+## [0.1.14] - 2026-11-01
 
 ### Fixed
 
 - **A player could load someone else's saved character by claiming their Steam ID.** The server only checked that a claim came from the same address as the player's game connection, so anyone who knew another player's Steam ID (it is public on their profile) could claim it while that player was away. With the Driftwood app 0.1.6 or later and a Steam Web API key on the server, the claim now carries a ticket from the player's own Steam, and the server asks Steam whose it is: a matching ticket is accepted, someone else's or a rejected one is refused. Claims that cannot be checked (an older app, no key, Steam down) still work as before for a Steam ID this server has never verified. A Steam ID it has verified needs a good ticket; only while Steam cannot be asked does it get in without one, and only from the address of its last verified join. A refused player stays on a temporary character and is told why in chat. Steam is asked only after the caller proves a game connection, at most twice per connection and 30 times per server in ten minutes, so a stranger cannot spend the server's Web API key. The readiness file counts claims as `identityVerified`, `identityUnverified`, `identityRefused` and `identityUnchecked`.
+- **Restoring the oldest of 20 snapshots deleted it.** The backup taken just before a restore pushed the oldest snapshot out before it was read, so the restore failed and that snapshot was gone. The snapshot being restored is now read first and kept.
+- **A restore that failed part way could start the server on an empty world.** The old world is now moved aside and put back if anything goes wrong, the restore is tried again at the next start, and if the old world cannot be put back the server refuses to host instead of making a new world over it.
+- **"Saved" was reported for saves that did not happen.** The game skips a save when no world is loaded and hides a failed file write, and the server passed both on as saved to the console, the status port and backups. A save now counts only when the world file holds it.
+- **A busy moment could stop the status file updating for good.** Writing it could fail while something was reading it, which stopped the player list, block sweeps and Discord alerts until a restart, or skipped the save on stop. The leaderboard, block list and other state files are now replaced in one step, so a crash mid-write no longer empties them.
+- **A console command that timed out could still happen later.** A `money`, `spawn`, `kick` or `block` that answered "did not respond" now never runs afterwards.
+
+### Docs
+
+- Self-hosting: the supervisor's own refusals are in `status.json`, not `host-ready.json`; after a restore, start the server again; settings are changed in `appsettings.json` because the host's config file is rewritten on every start; a block cannot match a player whose app sends no identity claim; the API secret's key is `[Http] Password`; `IdleFrameRate` added to the config reference.
 
 ## [0.1.13] - 2026-10-27
 

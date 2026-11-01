@@ -109,9 +109,9 @@ internal sealed class GameProcess : IAsyncDisposable
     }
 
     // The graceful path is: write stop.requested, let the host mod save and call Application.Quit,
-    // then wait for the save tree to settle before any force kill. The game itself saves three
-    // times on a clean exit (the host mod's explicit save, Server.OnStopServer, and
-    // SaveManager.OnApplicationQuit), and only one of those depends on us.
+    // then wait for the save tree to settle before any force kill. The world is saved twice on a
+    // clean exit (the host mod's explicit save and Server.OnStopServer; SaveManager.OnApplicationQuit
+    // is empty on game 1.1.3), and only one of those depends on us.
     public async Task StopAsync(CancellationToken cancellationToken)
     {
         if (_process.HasExited) return;

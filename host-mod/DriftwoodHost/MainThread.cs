@@ -25,7 +25,19 @@ namespace DriftwoodHost
 			internal Action Work;
 			internal readonly ManualResetEventSlim Done = new ManualResetEventSlim(false);
 			internal Exception Error;
+			// Queued, Running or Cancelled. A caller that gives up cancels the item if it has not
+			// started, so "did not respond in time" really means it never ran. Until 2026-10-30 a
+			// timed-out item stayed queued and ran when the main thread recovered: a console
+			// `money add` could answer "not changed", be logged as refused, and then happen anyway.
+			internal int State;
 		}
+
+		private const int Queued = 0;
+		private const int Running = 1;
+		private const int Cancelled = 2;
+
+		// How much longer a caller waits for work that had already started when its time ran out.
+		private const int StartedGraceMilliseconds = 5000;
 
 		private static readonly Queue<WorkItem> Pending = new Queue<WorkItem>();
 		private static readonly object Sync = new object();
@@ -49,6 +61,7 @@ namespace DriftwoodHost
 					if (Pending.Count == 0) return;
 					item = Pending.Dequeue();
 				}
+				if (Interlocked.CompareExchange(ref item.State, Running, Queued) != Queued) continue;
 				try { item.Work(); }
 				catch (Exception exception) { item.Error = exception; }
 				finally { item.Done.Set(); }
@@ -56,8 +69,9 @@ namespace DriftwoodHost
 		}
 
 		// Returns true when the work ran to completion on the main thread. False means it
-		// never ran, or threw - and the caller must report that as a failure rather than as
-		// a success with no effect.
+		// never ran, threw, or started and had not finished after the grace wait (the failure
+		// text says which) - and the caller must report that as a failure rather than as a
+		// success with no effect.
 		internal static bool Run(Action work, int timeoutMilliseconds, out string failure)
 		{
 			failure = null;
@@ -84,8 +98,18 @@ namespace DriftwoodHost
 
 			if (!item.Done.Wait(Math.Max(100, timeoutMilliseconds)))
 			{
-				failure = "this server did not respond in time";
-				return false;
+				if (Interlocked.CompareExchange(ref item.State, Cancelled, Queued) == Queued)
+				{
+					failure = "this server did not respond in time; nothing was changed";
+					return false;
+				}
+				// It started before the caller gave up. Wait a little longer for the real answer
+				// rather than reporting a failure for work that is happening.
+				if (!item.Done.Wait(StartedGraceMilliseconds))
+				{
+					failure = "this server started the request but did not finish it in time; it may still take effect";
+					return false;
+				}
 			}
 			if (item.Error != null)
 			{

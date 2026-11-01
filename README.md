@@ -153,9 +153,9 @@ Everyone joins from the Driftwood app: add `<your address>:22003`, then **Connec
 
 - **Stop:** `Ctrl+C` in the console, or create a file named `stop.requested` in `host-state\`. Either way the world is saved before the process exits.
 - **Back up, while it runs:** `DriftwoodServer.exe --snapshot appsettings.json` saves the world and zips it into `Backups\`.
-- **It will not start?** Read `host-state\host-ready.json`. `reason` is one plain sentence, and the common ones are decoded in [docs/operations.md](docs/operations.md). The game's own output is in `host-state\unity.log`.
+- **It will not start?** Read `host-state\status.json`. `reason` is one plain sentence, and the common ones are decoded in [docs/operations.md](docs/operations.md). The game's own output is in `host-state\unity.log`.
 - **Survive reboots:** a Task Scheduler task, *At startup*, running the step 7 command.
-- **After a crash:** the supervisor writes "This server stopped unexpectedly" to `host-ready.json` and exits; it does not start the game again by itself. Run the step 7 command again.
+- **After a crash:** the supervisor writes "This server stopped unexpectedly" to `status.json` and exits; it does not start the game again by itself. Run the step 7 command again.
 - **More servers on the same machine:** repeat from step 1 in a second folder with its own ports, ten apart (22013, 22023, ...).
 
 ## Ports
@@ -169,7 +169,7 @@ Keep 22003 and its neighbours rather than 7777: many games default to 7777, and 
 
 ## Settings
 
-The settings you are most likely to change, in `appsettings.json`. Every setting the host reads is in [protocol/config.md](protocol/config.md).
+The settings you can change, in `appsettings.json`. The supervisor writes the host's own config file from these on every start, so a hand edit there does not last; [protocol/config.md](protocol/config.md) lists every key the host reads.
 
 | Setting | Default | What it does |
 |---|---|---|

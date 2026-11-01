@@ -384,8 +384,7 @@ namespace DriftwoodHost
 				try
 				{
 					File.WriteAllText(temporary, Serialize(), new UTF8Encoding(false));
-					if (File.Exists(_path)) File.Delete(_path);
-					File.Move(temporary, _path);
+					HostFiles.ReplaceWith(temporary, _path);
 				}
 				finally
 				{

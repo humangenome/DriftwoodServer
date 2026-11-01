@@ -155,8 +155,7 @@ namespace DriftwoodHost
 				if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
 				string temporary = path + ".tmp";
 				File.WriteAllText(temporary, builder.ToString(), new UTF8Encoding(false));
-				if (File.Exists(path)) File.Delete(path);
-				File.Move(temporary, path);
+				HostFiles.ReplaceWith(temporary, path);
 				return null;
 			}
 			catch (Exception exception)

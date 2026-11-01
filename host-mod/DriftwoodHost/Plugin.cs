@@ -187,6 +187,11 @@ namespace DriftwoodHost
 			// this fixes: the game's own SaveManager.OnApplicationQuit wrote the live world
 			// straight back over the restored files and the restore was silently a no-op.
 			SnapshotStore.ApplyPending();
+			if (SnapshotStore.BrokenRestore != null)
+			{
+				Refuse("This server will not host because " + SnapshotStore.BrokenRestore + ".");
+				return;
+			}
 
 			// The owner layer, in dependency order: the audit record first (so even an
 			// enforcement that fires during boot can be recorded), then the block list it
@@ -872,9 +877,9 @@ namespace DriftwoodHost
 				}
 				if (crewWarned) yield return new WaitForSecondsRealtime(1.5f);
 
-				// Save explicitly, then let the game quit cleanly - SaveManager.OnApplicationQuit
-				// saves again on the way out, and Server.OnStopServer saves once more when the
-				// server connection stops. Three chances, one of which does not depend on us.
+				// Save explicitly, then let the game quit cleanly - Server.OnStopServer saves once
+				// more when the server connection stops (SaveManager.OnApplicationQuit is empty on
+				// 1.1.3). Two chances, one of which does not depend on us.
 				//
 				// Nothing in this block may be allowed to throw past Application.Quit. A stop that
 				// silently fails to stop is worse than a stop that fails to save: the supervisor
@@ -882,9 +887,15 @@ namespace DriftwoodHost
 				// one path that skips the game's own quit-time save as well.
 				try
 				{
-					if (!WorldLifecycle.SaveNow())
+					string saveDetail;
+					SaveOutcome saveOutcome = WorldLifecycle.SaveWorld(out saveDetail);
+					if (saveOutcome == SaveOutcome.Failed)
 					{
-						Logger.LogError("Could not run the game's save routine on shutdown.");
+						Logger.LogError("The world was not saved on shutdown: " + saveDetail + ".");
+					}
+					else if (saveOutcome == SaveOutcome.NothingToSave)
+					{
+						Logger.LogInfo("Shutting down before a world was loaded; nothing in memory to save.");
 					}
 				}
 				catch (Exception exception)

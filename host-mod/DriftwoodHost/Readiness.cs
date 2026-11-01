@@ -156,6 +156,8 @@ namespace DriftwoodHost
 		public bool WorldRunning =>
 			ServerStarted && WorldObjectPresent && IslandLoaded && !IslandLoading;
 
+		private int _writeFailures;
+
 		public void Write()
 		{
 			string payload;
@@ -251,7 +253,23 @@ namespace DriftwoodHost
 					.AddStrings("featuresStoodDown", FeaturesStoodDown)
 					.Close();
 			}
-			WriteAtomic(_path, payload);
+			// Never throws. Its callers are Unity coroutines (the sampler, the stop watcher), and an
+			// exception escaping one ends it for good: no more status, block sweeps or alerts, or no
+			// save on stop. A write that loses to a reader is simply written again two seconds later.
+			try
+			{
+				WriteAtomic(_path, payload);
+				_writeFailures = 0;
+			}
+			catch (Exception exception)
+			{
+				_writeFailures++;
+				if (_writeFailures == 1 || _writeFailures % 30 == 0)
+				{
+					Plugin.Log?.LogWarning("Could not write the status file (" + exception.GetType().Name + ": " +
+						exception.Message + "); " + _writeFailures + " in a row. It is written again on the next sample.");
+				}
+			}
 		}
 
 		// Never leave a half-written status file behind: a reader that catches one is exactly the
@@ -264,8 +282,7 @@ namespace DriftwoodHost
 			try
 			{
 				File.WriteAllText(temporary, content, new UTF8Encoding(false));
-				if (File.Exists(path)) File.Delete(path);
-				File.Move(temporary, path);
+				HostFiles.ReplaceWith(temporary, path);
 			}
 			finally
 			{

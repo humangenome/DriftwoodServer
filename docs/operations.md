@@ -18,8 +18,8 @@ you    ->  DriftwoodServer --config appsettings.json
 ## Stopping
 
 Write `stop.requested` into the state directory, or stop `DriftwoodServer`, which writes it for
-you. The host mod saves, closes the transport and asks Unity to quit; the game saves twice more on
-its own way out. Only if it does not go quietly does the supervisor wait for the save tree to stop
+you. The host mod saves, closes the transport and asks Unity to quit; the game saves once more when
+its server stops. Only if it does not go quietly does the supervisor wait for the save tree to stop
 changing and then force the process down, and it records which of those happened.
 
 **Never kill the game by process name.** These servers and their clients are frequently the same
@@ -38,8 +38,11 @@ one port cannot both start.
 
 ## When a server will not start
 
-Read one file: `host-ready.json`. `phase` is `WillNotHost` and `reason` is one plain sentence. The
-common ones:
+Read one file: `host-state\status.json`, which the supervisor writes. `phase` is `willNotHost` and
+`reason` is one plain sentence. It carries the supervisor's own checks (the build pin, a Steam update in
+progress, a missing or wrong host mod, a server that stopped unexpectedly) and repeats the host mod's
+reason from `host-ready.json` beside it. When the build pin refuses, the game never starts, so
+`host-ready.json` may still describe the previous run. The common reasons:
 
 | Reason mentions | What happened |
 |---|---|
