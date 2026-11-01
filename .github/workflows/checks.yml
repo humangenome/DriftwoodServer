@@ -29,6 +29,9 @@ jobs:
         # passes against the game build in GAME_MANAGED_DIR, and the release carries its output.
         run: echo "The host mod is built and checked against the game build by scripts/package-server-overlay.sh (release asset build-check.txt)"
       - name: Leak and clone-residue scan
+        # The named words live in a repository secret, so this public file never lists them.
+        env:
+          DRIFTWOOD_LEAK_WORDS: ${{ secrets.DRIFTWOOD_LEAK_WORDS }}
         run: ./tools/ci/check-leaks.sh
       - name: Required-files declaration
         run: ./tools/ci/check-required-files.sh

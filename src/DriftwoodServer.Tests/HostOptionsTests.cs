@@ -7,7 +7,7 @@ public class HostOptionsTests
 {
     private static HostOptions Valid() => new()
     {
-        InstanceId = "gs219092",
+        InstanceId = "lab-instance-1",
         GameRoot = "/srv/game",
         StateRoot = "/srv/state",
         SaveRoot = "/srv/saves",

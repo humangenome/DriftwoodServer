@@ -10,7 +10,20 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 fail=0
 bad() { printf 'FAIL: %s\n' "$*"; fail=1; }
 
-internal='sspanel|passrcon|gameserverid|b-cdn\.net|bitbucket\.org|survivalservers\.com/games/|[0-9]{1,3}(\.[0-9]{1,3}){3}:[0-9]{2,5}'
+# The named words this check looks for are not written here: a public file that lists them publishes
+# them. CI reads them from the repository secret DRIFTWOOD_LEAK_WORDS (one extended regex, words joined
+# with |); a maintainer passes the same value in the environment, or a file path in
+# DRIFTWOOD_LEAK_WORDS_FILE. Without either, only the address shape below is checked, and the run
+# says so. Findings for named words print where they are, never the matched text, because CI logs
+# are public too.
+named="${DRIFTWOOD_LEAK_WORDS:-}"
+if [ -z "$named" ] && [ -n "${DRIFTWOOD_LEAK_WORDS_FILE:-}" ] && [ -f "$DRIFTWOOD_LEAK_WORDS_FILE" ]; then
+  named="$(tr -d '\r\n' < "$DRIFTWOOD_LEAK_WORDS_FILE")"
+fi
+named="$(printf '%s' "$named" | tr -d '\r\n')"   # a stray newline would add an empty pattern that matches everything
+[ -n "$named" ] || printf 'note: no named leak words supplied (DRIFTWOOD_LEAK_WORDS); checking the address shape only\n'
+shape='[0-9]{1,3}(\.[0-9]{1,3}){3}:[0-9]{2,5}'
+internal="$shape${named:+|$named}"
 clone='stormforge|Stormforge|lodestone|Lodestone|delverium|Delverium|witchspire|Witchspire|grounded2|Grounded2|bellwright|Bellwright|solarpunk|Solarpunk|Beryllium|libbulletc|EOSSDK|Hercules-Win64-Shipping'
 
 # BOTH encodings, and the second one is the whole point. A .NET assembly stores its string
@@ -21,8 +34,12 @@ artefact_strings() { { strings -a "$1"; strings -a -e l "$1"; }; }
 while IFS= read -r -d '' artefact; do
   for pattern in "$internal" "$clone"; do
     if artefact_strings "$artefact" | grep -aEq "$pattern"; then
-      printf 'FAIL: %s contains a forbidden string matching /%s/\n' "$artefact" "$pattern"
-      artefact_strings "$artefact" | grep -aE "$pattern" | sort -u | head -5 | sed 's/^/    /'
+      if [ "$pattern" = "$internal" ]; then
+        printf 'FAIL: %s contains %s internal string(s) (named words or an address; text not printed)\n' "$artefact" "$(artefact_strings "$artefact" | grep -aEc "$pattern")"
+      else
+        printf 'FAIL: %s contains a forbidden string matching /%s/\n' "$artefact" "$pattern"
+        artefact_strings "$artefact" | grep -aE "$pattern" | sort -u | head -5 | sed 's/^/    /'
+      fi
       fail=1
     fi
   done
@@ -48,8 +65,8 @@ internal_hits="$(grep -rniE "$internal_src" \
    | grep -vE '(127\.0\.0\.1|0\.0\.0\.0|localhost|203\.0\.113\.[0-9]{1,3}|198\.51\.100\.[0-9]{1,3}|192\.0\.2\.[0-9]{1,3}):' \
    || true)"
 if [ -n "$internal_hits" ]; then
-  printf 'FAIL: internal reference in source:\n'
-  printf '%s\n' "$internal_hits" | head -10 | sed 's/^/    /'
+  printf 'FAIL: internal reference in source (file:line; text not printed):\n'
+  printf '%s\n' "$internal_hits" | cut -d: -f1,2 | head -10 | sed 's/^/    /'
   fail=1
 fi
 
