@@ -43,6 +43,9 @@
          and proven here. The connection-table half stays in IdentityClaims.cs and is
          proven on the canary instead. -->
     <Compile Include="../../host-mod/DriftwoodHost/IdentityClaimRules.cs" Link="Linked/IdentityClaimRules.cs" />
+    <!-- The Steam ticket check's rules: ticket parsing, reading Steam's answer, the accept/refuse
+         decision and the verified-id list. The network half (SteamTicketCheck) is not linked. -->
+    <Compile Include="../../host-mod/DriftwoodHost/SteamTicketRules.cs" Link="Linked/SteamTicketRules.cs" />
     <!-- The player-facing layer's pure parts: the chat-command parser (which lines the server
          eats and which it relays) with its throttle, and the catch leaderboard's arithmetic,
          ordering and on-disk round trip. Neither binds Unity, BepInEx or a game type. -->

@@ -63,7 +63,7 @@ gone.** Every caller signs — the hosting endpoint, the launcher
 | `GET /api/v1/health` | none | **200 only when the world is running**, else 503 |
 | `GET /api/v1/players` | none | names + durations, no ids |
 | `GET /api/v1/manifest` | none | the server's real loaded plugin set |
-| `POST /api/v1/identity` | none | a modded client claims its own SteamID64; the answer never varies |
+| `POST /api/v1/identity` | none | a modded client claims its own SteamID64 |
 | `GET /api/v1/status` | loopback, or signed | the panel document, ids included |
 | `POST /api/v1/save` | loopback, or signed | flush the world now |
 | `POST /api/v1/console` | signed | one host command |
@@ -161,8 +161,10 @@ than rendering a card that apologises for itself.
 
 ## `POST /api/v1/identity`
 
-Request `{"clientId": "3", "steamId": "76561197960287930", "name": "Steve"}` - both numbers as
-**decimal strings**, because a SteamID64 does not survive every JSON number path. Reply
+Request `{"clientId": "3", "steamId": "76561197960287930", "name": "Steve", "ticket": "<hex>"}` - both
+numbers as **decimal strings**, because a SteamID64 does not survive every JSON number path. `ticket`
+(0.1.14+, optional) is a Steam Web API ticket from the player's own Steam client
+(`SteamUser.GetAuthTicketForWebApi("driftwood")`) as hex, at most 3,000 characters. Reply
 `{"ok": true}`, always: nothing in the response varies with the claim's fate, so a probe cannot
 learn who is aboard by watching this route.
 
@@ -187,11 +189,33 @@ allowed to say:
 - claims are rate-limited and the table is bounded; a dropped claim degrades to the synthetic
   fallback, never to an unverified identity.
 
-**What this deliberately does not prove: Steam account ownership.** The server runs without a
-Steam client, so a claim asserts an id the way the game's own 1.0.4/1.0.5 join flow did - the
-client states it, nothing countersigns it. Someone who knows an absent player's SteamID64 and
-runs a modded client can claim it and inherit that saved character; that is the game's own
-historical trust model, restored, not widened. The name is display-only, sanitised, and
+**Steam account ownership (0.1.14+).** With a ticket and a Steam Web API key configured (the same
+key the name resolver uses), the server first checks that the caller holds a live game connection
+from this address, then asks Steam whose ticket it is (`ISteamUserAuth/AuthenticateUserTicket` on
+api.steampowered.com, app 4001890, identity `driftwood`). Steam calls are limited to two tickets per
+connection and 30 per server in ten minutes.
+
+- the ticket belongs to the claimed id: **verified**, and the id and a salted hash of this address
+  are remembered in the state directory (`verified-steam-ids.txt`);
+- the ticket belongs to someone else, or Steam rejects it: **refused**;
+- no ticket (an older app), no key (a self-hosted server without one), Steam unreachable or the
+  call limit reached: **unverified**, accepted under the rules above, for an id never verified here.
+
+For an id this server has verified before:
+
+- no ticket while Steam is answering, or the call limit reached: **refused**;
+- Steam unreachable or no key: **accepted unchecked** only from the address of its last verified
+  join, otherwise **refused**.
+
+A refused player keeps the synthetic fallback and sees a `[Server]` line in chat a few seconds after
+spawning, saying why. The game has no private server chat, so the crew sees it too.
+
+The reply is `{"ok":true}` for a caller with no game connection from this address and for refusals
+about who is aboard. A caller on its own connection also gets `"claim":"accepted"` or
+`"claim":"refused"`.
+
+Before 0.1.14, and still for an id never verified on a server, a claim asserts an id the way the
+game's own 1.0.4/1.0.5 join flow did: the client states it, nothing countersigns it. The name is display-only, sanitised, and
 corrected by the Steam Web API resolver when a key is configured.
 
 ## `POST /api/v1/console`

@@ -54,6 +54,9 @@ namespace DriftwoodHost
 		private static readonly Dictionary<ulong, long> NegativeUnix = new Dictionary<ulong, long>();
 
 		private static string _apiKey = string.Empty;
+		// The same key checks Steam tickets on identity claims (SteamTicketCheck). Empty when no
+		// usable key is configured; never logged.
+		internal static string ApiKeyForTicketChecks => _apiKey ?? string.Empty;
 		private static string _cachePath = string.Empty;
 		private static Thread _worker;
 		private static volatile bool _running;

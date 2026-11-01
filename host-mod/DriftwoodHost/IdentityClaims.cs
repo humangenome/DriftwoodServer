@@ -37,6 +37,41 @@ namespace DriftwoodHost
 		// More live claims than the server has slots is not a crew, it is a flood.
 		private const int MaxClaims = 64;
 
+		// MAIN THREAD. The cheap half of Submit's checks, run BEFORE any Steam call so that a caller
+		// with no game connection from this address cannot spend the Web API key. connectionKey
+		// names this connection object for TicketBudget; a recycled client id gets a fresh one.
+		internal static bool IsBound(int clientId, string httpAddress, out NetworkConnection connection, out int connectionKey, out string refusal)
+		{
+			connection = null;
+			connectionKey = 0;
+			refusal = null;
+			ServerManager server = InstanceFinder.ServerManager;
+			if (server == null || server.Clients == null)
+			{
+				refusal = "no server";
+				return false;
+			}
+			if (!server.Clients.TryGetValue(clientId, out connection) || connection == null || !connection.IsActive)
+			{
+				refusal = "no live connection with that id";
+				return false;
+			}
+			if (connection.IsLocalClient)
+			{
+				refusal = "the host's own loopback connection cannot carry a claim";
+				return false;
+			}
+			string transportAddress = null;
+			try { transportAddress = connection.GetAddress(); } catch { }
+			if (!IdentityClaimRules.AddressesMatch(transportAddress, httpAddress))
+			{
+				refusal = "the claim did not come from the address that connection plays from";
+				return false;
+			}
+			connectionKey = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(connection);
+			return true;
+		}
+
 		// MAIN THREAD. Everything about the claim is attacker-controlled; the refusal
 		// string is for the LOG only and never leaves this box (the HTTP route answers
 		// the same way whether a claim was accepted or refused, so a probe learns
