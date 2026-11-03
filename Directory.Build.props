@@ -21,6 +21,11 @@
          is the absolute checkout path - the exact string PathMap exists to keep out - plus
          the repository URL and commit. Shipped .pdb files carry all of it, so it stays off. -->
     <EnableSourceLink>false</EnableSourceLink>
+    <!-- .NET 9 and later mark every exe CET-compatible (hardware shadow stacks) by default. Such an exe
+         refuses to start on some Windows builds whose CPU has CET but whose OS only partly supports it
+         ("Your Windows doesn't fully support CET"). Off for every exe here; CI reads the flag from the
+         built Windows exe. -->
+    <CETCompat>false</CETCompat>
   </PropertyGroup>
 
   <!-- Strict settings for the supervisor only. The host mod compiles against Unity and
