@@ -9,9 +9,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
       - name: Version consistency
         run: ./tools/ci/assert-version.sh
       - name: Build the supervisor
@@ -35,3 +35,11 @@ jobs:
         run: ./tools/ci/check-leaks.sh
       - name: Required-files declaration
         run: ./tools/ci/check-required-files.sh
+      # .NET 9 and later mark an exe CET-compatible by default, and such an exe refuses to start on some
+      # Windows builds ("Your Windows doesn't fully support CET"). Directory.Build.props turns it off.
+      # This builds the Windows exe the README's publish line gives a self-hoster and reads the flag.
+      # Last, so its win-x64 restore and output touch none of the steps above.
+      - name: The Windows exe is not marked CET-compatible
+        run: |
+          dotnet publish src/DriftwoodServer/DriftwoodServer.csproj -c Release -r win-x64 --self-contained false -o out/cet-check
+          python3 scripts/check-cet-compat.py out/cet-check/DriftwoodServer.exe
