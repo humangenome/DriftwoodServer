@@ -182,7 +182,11 @@ namespace DriftwoodHost
 		internal const long FailureWindowMs = 10L * 60 * 1000;
 		internal const long FirstBlockMs = 60L * 1000;
 		internal const long MaxBlockMs = 15L * 60 * 1000;
+		// The failure table makes room at MaxTrackedAddresses (see MakeRoom). It grows past that
+		// only while every address in it is blocked, and never past HardCeiling.
 		private const int MaxTrackedAddresses = 4096;
+		private const int HardCeiling = 65536;
+		private const int RoomBatch = MaxTrackedAddresses / 16;
 
 		private sealed class FailState
 		{
@@ -190,10 +194,15 @@ namespace DriftwoodHost
 			internal long WindowStartMs;
 			internal long BlockedUntilMs;
 			internal int Strikes;
+			internal long LastFailureMs;
 		}
 
 		private readonly object _sync = new object();
 		private readonly Dictionary<string, FailState> _fails = new Dictionary<string, FailState>(StringComparer.Ordinal);
+		private int _lookAgainAt = MaxTrackedAddresses;
+		private long _lookAgainMs = long.MaxValue;
+		private bool _allBlockedNoted;
+		private string _notice;
 
 		internal static bool IsLoopback(string address)
 		{
@@ -223,10 +232,12 @@ namespace DriftwoodHost
 				FailState state;
 				if (!_fails.TryGetValue(address, out state))
 				{
-					if (_fails.Count >= MaxTrackedAddresses) Prune(nowMs);
+					if (_fails.Count >= MaxTrackedAddresses && (_fails.Count >= _lookAgainAt || nowMs >= _lookAgainMs))
+						MakeRoom(nowMs);
 					state = new FailState { WindowStartMs = nowMs };
 					_fails[address] = state;
 				}
+				state.LastFailureMs = nowMs;
 				if (nowMs - state.WindowStartMs > FailureWindowMs)
 				{
 					state.Failures = 0;
@@ -252,6 +263,18 @@ namespace DriftwoodHost
 			lock (_sync) _fails.Remove(address);
 		}
 
+		// The one line to log when the failure table first fills with blocks, with no address in
+		// it; null otherwise. The API calls this after Failure and logs what it gets.
+		internal string TakeNotice()
+		{
+			lock (_sync)
+			{
+				string notice = _notice;
+				_notice = null;
+				return notice;
+			}
+		}
+
 		// The one line logged when an address is turned away: the address, the door and how
 		// long. Once per block, never per wrong try, and never the token or a signature.
 		internal string BlockLine(string address, long nowMs)
@@ -262,18 +285,68 @@ namespace DriftwoodHost
 				(FailureWindowMs / 60000).ToString(CultureInfo.InvariantCulture) + " min";
 		}
 
-		// Drops addresses that are neither blocked nor inside a live failure window; if that
-		// frees nothing, starts over rather than grow without bound.
-		private void Prune(long nowMs)
+		// Makes room in a full failure table for a new address. First go the addresses that are
+		// neither blocked nor inside a live failure window, then the longest-quiet addresses that
+		// are not blocked, a batch at a time. An active block is never dropped to make room: when
+		// every address left is blocked, the table keeps them all and grows (one log line, no
+		// addresses), up to HardCeiling. Only at the ceiling does the block nearest to running out
+		// make way. Runs once per batch of new addresses or when the next block runs out, not on
+		// every failure.
+		private void MakeRoom(long nowMs)
 		{
-			List<string> stale = new List<string>();
+			List<string> quiet = new List<string>();
+			List<KeyValuePair<string, long>> open = new List<KeyValuePair<string, long>>();
+			string soonest = null;
+			long soonestUntil = long.MaxValue;
 			foreach (KeyValuePair<string, FailState> pair in _fails)
 			{
-				if (pair.Value.BlockedUntilMs <= nowMs && nowMs - pair.Value.WindowStartMs > FailureWindowMs)
-					stale.Add(pair.Key);
+				FailState state = pair.Value;
+				if (state.BlockedUntilMs > nowMs)
+				{
+					if (state.BlockedUntilMs < soonestUntil)
+					{
+						soonestUntil = state.BlockedUntilMs;
+						soonest = pair.Key;
+					}
+				}
+				else if (nowMs - state.WindowStartMs > FailureWindowMs) quiet.Add(pair.Key);
+				else open.Add(new KeyValuePair<string, long>(pair.Key, state.LastFailureMs));
 			}
-			foreach (string key in stale) _fails.Remove(key);
-			if (_fails.Count >= MaxTrackedAddresses) _fails.Clear();
+			foreach (string key in quiet) _fails.Remove(key);
+
+			int excess = _fails.Count - (MaxTrackedAddresses - RoomBatch);
+			if (excess > 0 && open.Count > 0)
+			{
+				open.Sort((a, b) => a.Value.CompareTo(b.Value));
+				for (int i = 0; i < excess && i < open.Count; i++) _fails.Remove(open[i].Key);
+			}
+
+			if (_fails.Count < MaxTrackedAddresses)
+			{
+				_lookAgainAt = MaxTrackedAddresses;
+				_lookAgainMs = long.MaxValue;
+				_allBlockedNoted = false;
+				return;
+			}
+
+			// Every address left is an active block.
+			if (!_allBlockedNoted)
+			{
+				_allBlockedNoted = true;
+				_notice = "auth table full: all " + _fails.Count.ToString(CultureInfo.InvariantCulture) +
+					" tracked addresses are blocked; every block is kept (up to " +
+					HardCeiling.ToString(CultureInfo.InvariantCulture) + ")";
+			}
+			if (_fails.Count >= HardCeiling && soonest != null)
+			{
+				_fails.Remove(soonest);
+				_lookAgainAt = HardCeiling;
+			}
+			else
+			{
+				_lookAgainAt = Math.Min(HardCeiling, _fails.Count + RoomBatch);
+			}
+			_lookAgainMs = soonestUntil;
 		}
 	}
 

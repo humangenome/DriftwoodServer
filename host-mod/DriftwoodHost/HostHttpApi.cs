@@ -1208,6 +1208,8 @@ namespace DriftwoodHost
 			long nowMs = NowMs();
 			if (_authFailures.Failure(address, nowMs))
 				Plugin.Log?.LogWarning(_authFailures.BlockLine(address, nowMs));
+			string tableNotice = _authFailures.TakeNotice();
+			if (tableNotice != null) Plugin.Log?.LogWarning(tableNotice);
 		}
 
 		private void Refused(NetworkStream stream)
