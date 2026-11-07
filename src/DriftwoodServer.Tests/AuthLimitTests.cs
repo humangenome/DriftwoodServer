@@ -165,6 +165,75 @@ public class AuthLimitTests
         Assert.Equal("NoBody", DoorLimit.Plan(GateTier.LoopbackOrSigned, true, false, 0, null, 0));
     }
 
+    // ------------------------------------------------------------------
+    // A full failure table (4096 addresses before it makes room, 65536 at most)
+    // ------------------------------------------------------------------
+
+    private const int TableLimit = 4096;
+    private const int TableCeiling = 65536;
+
+    private static string Addr(int i) => $"10.{(i >> 16) & 255}.{(i >> 8) & 255}.{i & 255}";
+
+    private static void BlockNow(object guard, string address, long t)
+    {
+        for (int i = 0; i < 5; i++) DoorLimit.Failure(guard, address, t);
+    }
+
+    [Fact]
+    public void AFloodOfNewAddressesNeverLiftsAnActiveBlock()
+    {
+        object guard = DoorLimit.NewGuard();
+        BlockNow(guard, Ip, T);
+        for (int i = 0; i < TableLimit * 3; i++) DoorLimit.Failure(guard, Addr(i), T + 1);
+
+        Assert.Equal(60, DoorLimit.Blocked(guard, Ip, T + 2));
+        Assert.True(DoorLimit.Tracked(guard) <= TableLimit, "addresses that are not blocked make room for new ones");
+    }
+
+    [Fact]
+    public void TheLongestQuietAddressesThatAreNotBlockedMakeRoomFirst()
+    {
+        object guard = DoorLimit.NewGuard();
+        for (int i = 0; i < TableLimit - 1; i++) DoorLimit.Failure(guard, Addr(i), T);
+        for (int i = 0; i < 4; i++) DoorLimit.Failure(guard, Ip, T + 5_000);
+
+        DoorLimit.Failure(guard, Addr(TableLimit), T + 5_001);
+        Assert.True(DoorLimit.Failure(guard, Ip, T + 5_002), "the newest guesser keeps its count; the oldest rows go");
+    }
+
+    [Fact]
+    public void ATableFullOfBlocksKeepsEveryBlockUntilTheCeilingThenDropsTheOneNearestToRunningOut()
+    {
+        object guard = DoorLimit.NewGuard();
+        BlockNow(guard, Ip, T);
+        for (int i = 0; i < TableCeiling - 1; i++) BlockNow(guard, Addr(i), T + 1_000);
+
+        Assert.Equal(TableCeiling, DoorLimit.Tracked(guard));
+        Assert.True(DoorLimit.Blocked(guard, Ip, T + 2_000) > 0);
+        Assert.True(DoorLimit.Blocked(guard, Addr(0), T + 2_000) > 0);
+
+        const string newcomer = "198.51.100.9";
+        BlockNow(guard, newcomer, T + 2_000);
+        Assert.Equal(TableCeiling, DoorLimit.Tracked(guard));
+        Assert.True(DoorLimit.Blocked(guard, newcomer, T + 2_000) > 0);
+        Assert.Equal(0, DoorLimit.Blocked(guard, Ip, T + 2_000));
+        Assert.True(DoorLimit.Blocked(guard, Addr(0), T + 2_000) > 0);
+        Assert.True(DoorLimit.Blocked(guard, Addr(TableCeiling - 2), T + 2_000) > 0);
+    }
+
+    [Fact]
+    public void ATableFullOfBlocksLogsOneLineWithNoAddressInIt()
+    {
+        object guard = DoorLimit.NewGuard();
+        for (int i = 0; i < TableLimit; i++) BlockNow(guard, Addr(i), T);
+        Assert.Null(DoorLimit.TakeNotice(guard));
+
+        for (int i = TableLimit; i < TableLimit + 600; i++) BlockNow(guard, Addr(i), T);
+        Assert.Equal("auth table full: all 4096 tracked addresses are blocked; every block is kept (up to 65536)",
+            DoorLimit.TakeNotice(guard));
+        Assert.Null(DoorLimit.TakeNotice(guard));
+    }
+
     private static string Sign(byte[] key, string method, string path, long ts, string bodySha) =>
         ApiSignature.Compute(key, ApiSignature.Canonical(method, path, ts, bodySha));
 
@@ -200,6 +269,16 @@ public class AuthLimitTests
 
         internal static string BlockLine(object guard, string address, long nowMs) =>
             (string)Find(GuardType(), "BlockLine", 2).Invoke(guard, new object[] { address, nowMs });
+
+        internal static string TakeNotice(object guard) =>
+            (string)Find(GuardType(), "TakeNotice", 0).Invoke(guard, Array.Empty<object>());
+
+        internal static int Tracked(object guard)
+        {
+            FieldInfo f = GuardType().GetField("_fails", Any);
+            Assert.True(f != null, "AuthFailureGuard has no _fails table");
+            return ((System.Collections.ICollection)f.GetValue(guard)).Count;
+        }
 
         internal static string Verdict(byte[] key, bool authUsable, string method, string path,
             string timestampHeader, string signatureHeader, string bodySha, long nowUnix, int windowSeconds) =>
