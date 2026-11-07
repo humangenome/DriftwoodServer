@@ -190,10 +190,10 @@ public class AuthLimitTests
         internal static object NewGuard() => Activator.CreateInstance(GuardType(), nonPublic: true);
 
         internal static bool Failure(object guard, string address, long nowMs) =>
-            (bool)Find(GuardType(), "Failure", 2).Invoke(guard, new object[] { address, nowMs });
+            (bool)Find(GuardType(), "Failure", 2).Invoke(guard, new object[] { address, nowMs })!;
 
         internal static long Blocked(object guard, string address, long nowMs) =>
-            (long)Find(GuardType(), "BlockedSeconds", 2).Invoke(guard, new object[] { address, nowMs });
+            (long)Find(GuardType(), "BlockedSeconds", 2).Invoke(guard, new object[] { address, nowMs })!;
 
         internal static void Success(object guard, string address) =>
             Find(GuardType(), "Success", 1).Invoke(guard, new object[] { address });
