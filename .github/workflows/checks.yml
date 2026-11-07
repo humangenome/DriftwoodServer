@@ -43,3 +43,17 @@ jobs:
         run: |
           dotnet publish src/DriftwoodServer/DriftwoodServer.csproj -c Release -r win-x64 --self-contained false -o out/cet-check
           python3 scripts/check-cet-compat.py out/cet-check/DriftwoodServer.exe
+
+  # The host mod runs on Windows, so the rules linked from it into the test project run on Windows too.
+  test-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - name: Test
+        shell: bash
+        run: |
+          dotnet test src/DriftwoodServer.Tests/DriftwoodServer.Tests.csproj -c Release --logger "console;verbosity=minimal" | tee test-output.txt
+          grep -E 'Passed!.*Failed: +0' test-output.txt
