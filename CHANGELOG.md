@@ -4,6 +4,10 @@ All notable changes to DriftwoodServer are recorded here.
 
 ## [0.1.15] - 2026-11-06
 
+### Changed
+
+- The self-hosting supervisor builds and runs on .NET 10, because .NET 8 support ends on November 10. Rebuild it with the .NET 10 SDK as in step 4 of the README. The host mod is the same as in 0.1.14.
+
 ## [0.1.14] - 2026-11-01
 
 ### Fixed
