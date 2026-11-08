@@ -107,6 +107,8 @@ Copy [`appsettings.example.json`](appsettings.example.json) from the folder you 
 - `gamePort`: the UDP port players connect to. `httpPort` stays `0`: the status and admin port then takes the port directly above `gamePort` on its own.
 - `discordWebhookUrl` (optional): see [Settings](#settings).
 
+Optional: put a Steam Web API key in `SteamWebApiKeyFile` (see protocol/config.md) and the server checks with Steam that each joining player owns the Steam account they claim.
+
 Leave `worldName` alone once the server has run. Renaming it later starts a fresh world under the new name; the old world stays in `Saves\` under the old one.
 
 Last, pin the game build. The server refuses to start until you pin the build you copied, and that is what stops a Steam update from silently breaking your server. Set `pinnedBuild.assemblySha256` to 64 zeros, then ask the install for its real values:
