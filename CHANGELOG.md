@@ -4,6 +4,15 @@ All notable changes to DriftwoodServer are recorded here.
 
 ## [0.1.16] - 2026-11-11
 
+### Security
+
+- After 5 wrongly signed admin requests from one address within 10 minutes, the server turns that address away for 1 minute, doubling each time up to 15 minutes. A right signature clears the count.
+- Stronger protection against floods of wrong password tries.
+
+### Fixed
+
+- The console's spawn command now drops the item next to the player even if they have not moved since joining. It used to land in the middle of the map.
+
 ## [0.1.15] - 2026-11-06
 
 ### Changed
