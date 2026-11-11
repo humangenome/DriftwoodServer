@@ -4,7 +4,7 @@ All notable changes to DriftwoodServer are recorded here.
 
 ## [0.1.16] - 2026-11-11
 
-<!-- DRAFT: these notes wait for approval. Remove this comment once approved; if they are not approved by the tag, tag the commit before this one. -->
+<!-- DRAFT: these notes wait for approval. Before the tag, in one commit: if approved, delete this comment; if not, delete this comment and the notes below it, and keep the heading. -->
 
 ### Security
 
