@@ -48,6 +48,13 @@ X-Driftwood-Signature: hex(HMACSHA256(sha256(AuthToken), "METHOD\n<path>\n<ts>\n
   Connections from the box itself (the hosting panel, the supervisor) have their own pool; callers
   on the network share another, at most 4 per address; a verified upload or snapshot download moves
   to a small pool of its own.
+- **Wrong-signature limit (next release).** Five wrong signatures with a current timestamp from one
+  address in 10 minutes turn that address away from every signed route for 1 minute, then 2, 4, up
+  to 15. A turned-away request gets `429` with `Retry-After` before any of its body is read. A right
+  signature clears the count. Not counted: a missing or malformed signature, a timestamp outside the
+  300 seconds (a clock problem), a replay. The public routes stay open, and callers on the box itself
+  are never limited. Each block writes one warning line to the host log:
+  `auth block: door=http address=<ip> blocked=<n>s after 5 wrong tries in 10 min`.
 
 There used to be a second scheme here, a static token in `X-Driftwood-Auth`, while the launcher
 signed every request the way the rest of the family signs them. Two schemes on one API is how one of

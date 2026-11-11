@@ -85,6 +85,8 @@ namespace DriftwoodHost
 		private volatile bool _running;
 		private readonly ConnectionGate _gate =
 			new ConnectionGate(ApiGate.LoopbackCap, ApiGate.RemoteCap, ApiGate.PerAddressCap, ApiGate.LongCap);
+		// Wrong signatures per caller address: five in ten minutes turn the address away.
+		private readonly AuthFailureGuard _authFailures = new AuthFailureGuard();
 
 		internal HostHttpApi(HostConfig config, Readiness readiness)
 		{
@@ -549,11 +551,17 @@ namespace DriftwoodHost
 			bool shapeOk = ApiGate.HeaderShapeOk(request.Header(TimestampHeader), request.Header(SignatureHeader),
 				PlayerDirectory.NowUnix(), ReplayWindowSeconds);
 			string declaredSha = request.Header(ContentShaHeader);
+			long blockedSeconds = needsSignature ? _authFailures.BlockedSeconds(request.RemoteAddress, NowMs()) : 0;
 			BodyPlan plan = ApiGate.Plan(tier, request.IsLoopback, upload, request.ContentLength, declaredSha,
-				_authUsable, shapeOk, SnapshotStore.MaxImportBytes);
+				_authUsable, shapeOk, SnapshotStore.MaxImportBytes, blockedSeconds);
 
 			switch (plan)
 			{
+				case BodyPlan.RefuseBlocked:
+					Write(stream, 429, "application/json",
+						Error("too many wrong signatures from this address; try again in " + blockedSeconds + " s"),
+						"Retry-After: " + blockedSeconds.ToString(CultureInfo.InvariantCulture));
+					return;
 				case BodyPlan.RefuseTooLarge:
 					Write(stream, 413, "application/json", Error("request body too large"));
 					return;
@@ -1153,23 +1161,26 @@ namespace DriftwoodHost
 		// bodySha is the body hash the signature must cover: the hash of the bytes read, or, for
 		// a caller that declared it up front, the declared hash (the body is then required to
 		// match it after it is read).
+		//
+		// A well-formed signature with a fresh timestamp that does not match is a guess at the
+		// key, and counts toward this address's block. Nothing else that fails here counts: not
+		// a stale timestamp (a clock problem), not a replay (whoever sent it held the key), and
+		// not a body that fails to match a correctly signed hash (checked by the caller).
 		private bool Authorised(Request request, string bodySha)
 		{
-			if (!_authUsable) return false;
-			string timestampHeader = request.Header(TimestampHeader);
-			string signatureHeader = request.Header(SignatureHeader);
-			if (string.IsNullOrEmpty(timestampHeader) || string.IsNullOrEmpty(signatureHeader)) return false;
-
-			long timestamp;
-			if (!long.TryParse(timestampHeader, NumberStyles.Integer, CultureInfo.InvariantCulture, out timestamp)) return false;
 			long now = PlayerDirectory.NowUnix();
-			if (Math.Abs(now - timestamp) > ReplayWindowSeconds) return false;
+			SignatureVerdict verdict = ApiGate.CheckSignature(_authKey, _authUsable, request.Method, request.Path,
+				request.Header(TimestampHeader), request.Header(SignatureHeader), bodySha, now, ReplayWindowSeconds);
+			if (verdict == SignatureVerdict.Wrong)
+			{
+				WrongSignature(request.RemoteAddress);
+				return false;
+			}
+			if (verdict != SignatureVerdict.Valid) return false;
 
-			string canonical = ApiSignature.Canonical(request.Method, request.Path, timestamp, bodySha ?? string.Empty);
-			string expected = ApiSignature.Compute(_authKey, canonical);
-
-			string supplied = signatureHeader.Trim().ToLowerInvariant();
-			if (!ApiSignature.ConstantTimeEquals(expected, supplied)) return false;
+			// A Valid verdict means both headers are present and the timestamp parses.
+			long timestamp = long.Parse(request.Header(TimestampHeader).Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture);
+			string supplied = request.Header(SignatureHeader).Trim().ToLowerInvariant();
 
 			// Replay guard. Without it a captured signature is good for the whole window, which
 			// on a restore route means anybody who saw one request can roll a world back.
@@ -1188,7 +1199,17 @@ namespace DriftwoodHost
 				if (_seenSignatures.ContainsKey(supplied)) return false;
 				_seenSignatures[supplied] = timestamp;
 			}
+			_authFailures.Success(request.RemoteAddress);
 			return true;
+		}
+
+		private void WrongSignature(string address)
+		{
+			long nowMs = NowMs();
+			if (_authFailures.Failure(address, nowMs))
+				Plugin.Log?.LogWarning(_authFailures.BlockLine(address, nowMs));
+			string tableNotice = _authFailures.TakeNotice();
+			if (tableNotice != null) Plugin.Log?.LogWarning(tableNotice);
 		}
 
 		private void Refused(NetworkStream stream)
@@ -1203,10 +1224,17 @@ namespace DriftwoodHost
 		// ------------------------------------------------------------------
 		private void Write(NetworkStream stream, int status, string contentType, string body)
 		{
+			Write(stream, status, contentType, body, null);
+		}
+
+		// extraHeader: one more "Name: value" line, or null.
+		private void Write(NetworkStream stream, int status, string contentType, string body, string extraHeader)
+		{
 			byte[] bytes = Encoding.UTF8.GetBytes(body ?? string.Empty);
 			StringBuilder head = new StringBuilder();
 			head.Append("HTTP/1.1 ").Append(status).Append(' ').Append(StatusText(status)).Append("\r\n");
 			head.Append("Content-Type: ").Append(contentType).Append("; charset=utf-8\r\n");
+			if (!string.IsNullOrEmpty(extraHeader)) head.Append(extraHeader).Append("\r\n");
 			head.Append("Content-Length: ").Append(bytes.Length).Append("\r\n");
 			head.Append("Cache-Control: no-store\r\n");
 			// The launcher's Mods tab can be opened from a browser-hosted surface in this
@@ -1266,6 +1294,7 @@ namespace DriftwoodHost
 				case 411: return "Length Required";
 				case 413: return "Payload Too Large";
 				case 428: return "Precondition Required";
+				case 429: return "Too Many Requests";
 				case 500: return "Internal Server Error";
 				case 503: return "Service Unavailable";
 				default: return "OK";
