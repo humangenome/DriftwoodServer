@@ -25,7 +25,8 @@ namespace DriftwoodHost
 	//               island scene and every player is teleported to its spawn together.
 	//   spawn    -> GameInfo.GetSpawnable + Server.Instance.Spawn, the same pair /spawn uses -
 	//               but positioned at a CONNECTED PLAYER instead of at the camera, because the
-	//               camera of a headless process is nowhere anybody stands.
+	//               camera of a headless process is nowhere anybody stands (a player who has not
+	//               moved yet: the island's arrival point, see SpawnPlacement).
 	//   killboss -> Creature.ServerChangeHp on BossManager.Boss: the same server-side HP change
 	//               a legitimate hit lands (Server.HitCreature does exactly this), so death,
 	//               trophy and progression all follow the game's own kill path.
@@ -173,6 +174,7 @@ namespace DriftwoodHost
 
 		// MAIN THREAD. Drop one of the game's spawnable items next to a connected player - the
 		// same catalogue and server spawn /spawn uses, aimed at a person instead of a camera.
+		// Which player, and where when nobody has moved yet: SpawnPlacement.
 		internal static string SpawnItem(string requestedName, out string spawnedName, out string nearName)
 		{
 			spawnedName = string.Empty;
@@ -189,16 +191,32 @@ namespace DriftwoodHost
 						"\" - the name is the in-game one with spaces removed.";
 				// A spawn lands next to a person, so an empty server refuses rather than
 				// dropping an item at a place nobody stands and nobody can find.
-				OwnerActions.Found target = null;
+				List<OwnerActions.Found> players = new List<OwnerActions.Found>();
+				List<Vector3> standing = new List<Vector3>();
+				List<bool> reported = new List<bool>();
 				foreach (OwnerActions.Found candidate in OwnerActions.ConnectedPlayers())
 				{
 					if (candidate.Player == null) continue;
-					target = candidate;
-					break;
+					Vector3 at = candidate.Player.transform.position;
+					players.Add(candidate);
+					standing.Add(at);
+					reported.Add(SpawnPlacement.IsReported(at.x, at.y, at.z));
 				}
-				if (target == null)
+				// A player who has not moved since joining is at the world origin on this server
+				// (SpawnPlacement explains why), so the island's arrival point stands in for them.
+				Vector3 arrival = Vector3.zero;
+				bool arrivalKnown = false;
+				if (!reported.Contains(true))
+				{
+					float unusedRotation;
+					arrivalKnown = GameCompat.TryPlayerSpawn(Vector3.zero, out arrival, out unusedRotation) && arrival != Vector3.zero;
+				}
+				SpawnPlacement.Spot spot = SpawnPlacement.Choose(reported, arrivalKnown, out int named);
+				if (spot == SpawnPlacement.Spot.Nobody)
 					return "nobody is connected to receive it - spawn drops the item next to a player.";
-				Vector3 position = target.Player.transform.position + Vector3.up * 1.5f;
+				OwnerActions.Found target = players[named];
+				Vector3 ground = spot == SpawnPlacement.Spot.IslandArrival ? arrival : standing[named];
+				Vector3 position = ground + Vector3.up * 1.5f;
 				Item item = UnityEngine.Object.Instantiate(spawnable, position, Quaternion.identity);
 				if (item == null) return "the game could not create that item.";
 				Server.Instance.Spawn(item.gameObject);
