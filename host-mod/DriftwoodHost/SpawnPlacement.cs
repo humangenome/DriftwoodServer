@@ -36,6 +36,18 @@ namespace DriftwoodHost
 			PlayerUnreported
 		}
 
+		// The host log's half sentence for each choice (staff and self-hosters read it; the owner's reply is unchanged).
+		internal static string Describe(Spot spot)
+		{
+			switch (spot)
+			{
+				case Spot.Player: return "next to the player's last reported position";
+				case Spot.IslandArrival: return "the island's arrival point, because no connected player has moved since joining";
+				case Spot.PlayerUnreported: return "the player's position as this server has it, because nobody has moved since joining and the island's arrival point could not be read";
+				default: return "nowhere, because nobody is connected";
+			}
+		}
+
 		internal static bool IsReported(float x, float y, float z) =>
 			x * x + y * y + z * z >= UnreportedRadius * UnreportedRadius;
 

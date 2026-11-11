@@ -222,6 +222,7 @@ namespace DriftwoodHost
 				Server.Instance.Spawn(item.gameObject);
 				spawnedName = spawnable.name;
 				nearName = target.Name;
+				Plugin.Log?.LogInfo("Owner spawn: " + spawnable.name + " at " + Where(ground) + ", " + SpawnPlacement.Describe(spot) + ".");
 				return null;
 			}
 			catch (Exception exception)
@@ -267,6 +268,12 @@ namespace DriftwoodHost
 		private static int PlayableIslands()
 		{
 			return GameCompat.PlayableIslands();
+		}
+
+		private static string Where(Vector3 at)
+		{
+			return "(" + at.x.ToString("0.#", CultureInfo.InvariantCulture) + ", " + at.y.ToString("0.#", CultureInfo.InvariantCulture) +
+				", " + at.z.ToString("0.#", CultureInfo.InvariantCulture) + ")";
 		}
 
 		private static Player FirstConnectedPlayer()

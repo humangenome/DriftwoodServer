@@ -44,6 +44,14 @@ public class SpawnPlacementTests
 	}
 
 	[Fact]
+	public void TheHostLog_SaysWhichPlaceWasUsed()
+	{
+		Assert.Contains("arrival point", SpawnPlacement.Describe(SpawnPlacement.Spot.IslandArrival));
+		Assert.Contains("last reported position", SpawnPlacement.Describe(SpawnPlacement.Spot.Player));
+		Assert.Contains("could not be read", SpawnPlacement.Describe(SpawnPlacement.Spot.PlayerUnreported));
+	}
+
+	[Fact]
 	public void NobodyHasMovedAndNoArrivalPoint_FallsBackToThePlayer()
 	{
 		Assert.Equal(SpawnPlacement.Spot.PlayerUnreported, SpawnPlacement.Choose(new[] { false }, false, out int named));
