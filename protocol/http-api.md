@@ -48,7 +48,7 @@ X-Driftwood-Signature: hex(HMACSHA256(sha256(AuthToken), "METHOD\n<path>\n<ts>\n
   Connections from the box itself (the hosting panel, the supervisor) have their own pool; callers
   on the network share another, at most 4 per address; a verified upload or snapshot download moves
   to a small pool of its own.
-- **Wrong-signature limit (next release).** Five wrong signatures with a current timestamp from one
+- **Wrong-signature limit (0.1.16).** Five wrong signatures with a current timestamp from one
   address in 10 minutes turn that address away from every signed route for 1 minute, then 2, 4, up
   to 15. A turned-away request gets `429` with `Retry-After` before any of its body is read. A right
   signature clears the count. Not counted: a missing or malformed signature, a timestamp outside the

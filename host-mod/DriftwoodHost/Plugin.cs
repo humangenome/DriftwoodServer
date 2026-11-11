@@ -24,7 +24,7 @@ namespace DriftwoodHost
 	public class Plugin : BaseUnityPlugin
 	{
 		public const string Guid = "com.humangenome.driftwood.host";
-		public const string Version = "0.1.15";
+		public const string Version = "0.1.16";
 
 		internal static ManualLogSource Log;
 
