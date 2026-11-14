@@ -48,16 +48,22 @@ namespace DriftwoodHost
 		{
 			// The reader's name carries a codegen hash that moves when the game rebuilds
 			// (596900633 on 1.0.4, 1871804056 on 1.0.6), so it is resolved by PREFIX and the
-			// resolution refuses on ambiguity. Optional + grouped: without it the server still
-			// hosts and players still play - identity degrades back to the shared-host-id
-			// defect, which the readiness document then names in featuresStoodDown.
+			// resolution refuses on ambiguity.
+			//
+			// REQUIRED since 0.1.17 (was Optional). Without it every joiner spawns as the host
+			// placeholder: one shared character for the whole crew, nobody on the roster, kick or
+			// blocklist, and - since 0.1.14 - no Steam ticket check either, because the identity
+			// claim is applied through this reader. Hosting on in that state looks healthy and
+			// quietly merges every player's save, so a game build that moves this reader now
+			// refuses to host with the reason named, like every other required target.
+			// check-game-build.sh resolves it on 1.0.5 and 1.1.3.
 			yield return new PatchTarget
 			{
 				TypeName = "Server",
 				MethodName = "RpcReader___SpawnPlayer___*",
 				MethodNamePrefix = "RpcReader___SpawnPlayer___",
 				Kind = PatchKind.Custom,
-				Necessity = PatchNecessity.Optional,
+				Necessity = PatchNecessity.Required,
 				Group = "spawn-identity",
 				Prefix = AccessTools.Method(typeof(SpawnIdentity), nameof(ReaderPrefix)),
 				Finalizer = AccessTools.Method(typeof(SpawnIdentity), nameof(ReaderFinalizer)),
