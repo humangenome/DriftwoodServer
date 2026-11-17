@@ -271,7 +271,7 @@ namespace DriftwoodHost
 					return;
 
 				default:
-					Reply(PlayerCommands.ChatSafe(sender.Name) + ": there is no !" + verb + " - try !help");
+					Reply(PlayerCommands.ChatSafe(sender.Name) + ": there's no !" + verb + ". Try !help.");
 					return;
 			}
 		}
@@ -282,7 +282,7 @@ namespace DriftwoodHost
 			double remaining = _cooldowns.StuckRemaining(sender.SteamId, now);
 			if (remaining > 0)
 			{
-				Reply(PlayerCommands.ChatSafe(sender.Name) + ": !stuck is on cooldown for another " + Math.Ceiling(remaining).ToString(CultureInfo.InvariantCulture) + "s.");
+				Reply(PlayerCommands.ChatSafe(sender.Name) + ": you can use !stuck again in " + Math.Ceiling(remaining).ToString(CultureInfo.InvariantCulture) + "s.");
 				return;
 			}
 
@@ -311,8 +311,8 @@ namespace DriftwoodHost
 			}
 			string line = PlayerCommands.ChatSafe(sender.Name) + ": ";
 			line += session < 0
-				? "you have just arrived"
-				: "you have been on this server for " + PlayerCommands.Duration(session) + " this session";
+				? "you just arrived"
+				: "you've been on this server for " + PlayerCommands.Duration(session) + " this session";
 			if (CatchLedger.Enabled)
 			{
 				CatchLedger.Entry entry = CatchLedger.Get(sender.SteamId);
@@ -334,7 +334,7 @@ namespace DriftwoodHost
 			List<CatchLedger.Entry> top = CatchLedger.Top(3);
 			if (top.Count == 0)
 			{
-				Reply(PlayerCommands.ChatSafe(sender.Name) + ": nobody is on the board yet - it counts identified players from their first landed or sold catch.");
+				Reply(PlayerCommands.ChatSafe(sender.Name) + ": nobody is on the board yet. Land or sell a catch to get on it.");
 				return;
 			}
 			System.Text.StringBuilder builder = new System.Text.StringBuilder("Top anglers: ");
@@ -346,7 +346,7 @@ namespace DriftwoodHost
 					.Append(" (").Append(top[i].Catches).Append(top[i].Catches == 1 ? " catch)" : " catches)");
 			}
 			int rank = CatchLedger.RankOf(sender.SteamId);
-			if (rank > 3) builder.Append("  - you are #").Append(rank);
+			if (rank > 3) builder.Append("  You're #").Append(rank).Append('.');
 			Reply(builder.ToString());
 		}
 

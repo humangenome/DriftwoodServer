@@ -92,12 +92,12 @@ namespace DriftwoodHost
 					SaveOutcome outcome = SaveOutcome.Failed;
 					if (!MainThread.Run(() => { outcome = WorldLifecycle.SaveWorld(out detail); }, 15000, out failure))
 					{
-						output = "the world was NOT saved: " + failure;
+						output = "the world wasn't saved: " + failure;
 						return false;
 					}
 					if (outcome != SaveOutcome.Saved)
 					{
-						output = "the world was NOT saved: " + detail;
+						output = "the world wasn't saved: " + detail;
 						return false;
 					}
 					output = "world saved";
@@ -109,10 +109,10 @@ namespace DriftwoodHost
 					string id, failure;
 					if (!SnapshotStore.Create("console", out id, out failure))
 					{
-						output = "snapshot failed: " + failure;
+						output = "couldn't take a backup: " + failure;
 						return false;
 					}
-					output = "snapshot taken: " + id;
+					output = "backup taken: " + id;
 					return true;
 				}
 
@@ -121,7 +121,7 @@ namespace DriftwoodHost
 					List<SnapshotStore.Summary> list = SnapshotStore.List();
 					if (list.Count == 0)
 					{
-						output = "no snapshots yet - run 'snapshot' to take one";
+						output = "no backups yet. Run 'snapshot' to take one.";
 						return true;
 					}
 					StringBuilder builder = new StringBuilder();
@@ -192,14 +192,14 @@ namespace DriftwoodHost
 				case "stop":
 				case "shutdown":
 				case "restart":
-					output = "lifecycle is not on this console. Stop and restart from your hosting panel or supervisor, " +
-						"which flushes the world and takes a backup first - this console would skip both.";
+					output = "stop and restart aren't on this console. Use your server panel or DriftwoodServer.exe: " +
+						"they save the world and take a backup first.";
 					return false;
 
 				case "op":
 				case "admin":
-					output = "there are no in-game admin levels: How to Fish ships no admin concept, so there is nothing " +
-						"to grant a player. Everyone who can open this console has every command it offers.";
+					output = "How to Fish has no admin roles, so there's nothing to give a player. " +
+						"Anyone with the admin password can use every command here.";
 					return false;
 
 				default:
@@ -235,7 +235,7 @@ namespace DriftwoodHost
 				failure ?? "removed from the server");
 			output = failure != null
 				? "nobody was kicked: " + failure
-				: kickedName + " was removed from the server. They can reconnect - use 'block' to keep them out.";
+				: kickedName + " was kicked. They can join again. Use 'block' to keep them out.";
 			return Finish(failure == null, auditProblem, ref output);
 		}
 
@@ -295,8 +295,8 @@ namespace DriftwoodHost
 					string kickFailure = OwnerActions.Kick(found);
 					doneSentence = kickFailure == null
 						? target + " is now blocked and has been removed from the server."
-						: target + " is now blocked, but removing them just now failed (" + kickFailure +
-							") - the block sweep will remove them within seconds.";
+						: target + " is now blocked. Kicking them didn't work just now (" + kickFailure +
+							"), so they'll be removed within seconds.";
 				}
 				else
 				{
@@ -448,7 +448,7 @@ namespace DriftwoodHost
 			output = failure != null
 				? "the wallet was not changed: " + failure
 				: (add ? "Added " : "Removed ") + amount.ToString("N0", CultureInfo.InvariantCulture) +
-					(add ? " to" : " from") + " the crew's shared wallet - it now holds " +
+					(add ? " to" : " from") + " the crew's shared wallet. It now holds " +
 					newBalance.ToString("N0", CultureInfo.InvariantCulture) + ".";
 			return Finish(failure == null, auditProblem, ref output);
 		}
@@ -493,8 +493,8 @@ namespace DriftwoodHost
 						ActionTimeoutMs, out mutateRunFailure);
 					if (!ran2) failure = failure ?? mutateRunFailure;
 					if (failure == null)
-						done = "The whole crew is being moved to island " + landedOn +
-							" - everyone teleports to its spawn together.";
+						done = "Moving the whole crew to island " + landedOn +
+							". Everyone teleports to its spawn together.";
 					break;
 				}
 				case "set":
@@ -530,7 +530,7 @@ namespace DriftwoodHost
 		{
 			if (args.Length == 0)
 			{
-				output = "usage: spawn <item name> - the in-game name, spaces optional. The item drops next to a connected player.";
+				output = "usage: spawn <item name>. Use the in-game name, spaces optional. The item drops next to a connected player.";
 				return false;
 			}
 
@@ -564,7 +564,7 @@ namespace DriftwoodHost
 				failure ?? "boss killed");
 			output = failure != null
 				? "no boss was killed: " + failure
-				: bossName + " has been dealt a killing blow - the fight ends as a normal kill, trophy included.";
+				: bossName + " is dead. The fight ends as a normal kill, trophy included.";
 			return Finish(failure == null, auditProblem, ref output);
 		}
 
@@ -610,7 +610,7 @@ namespace DriftwoodHost
 				return "usage: top [how many rows]";
 			}
 			List<CatchLedger.Entry> rows = CatchLedger.Top(count);
-			if (rows.Count == 0) return "nobody is on the board yet. It counts identified players only (the Driftwood app's identity claim; a synthetic per-connection id never gets a row), from their first landed or sold catch. (" + CatchHooks.State + ")";
+			if (rows.Count == 0) return "nobody is on the board yet. Players get on it with their first catch they land or sell, if they joined with Driftwood or DriftwoodConnect. (" + CatchHooks.State + ")";
 			StringBuilder builder = new StringBuilder();
 			builder.Append("#   name                  catches  earnings    bosses  playtime   best catch").Append(NewLine);
 			for (int i = 0; i < rows.Count; i++)
@@ -631,7 +631,7 @@ namespace DriftwoodHost
 				else builder.Append('-');
 			}
 			builder.Append(NewLine).Append(NewLine)
-				.Append("Ranked by earnings. Catches are fish landed after this server hooked them; earnings are sales credited to the angler who hooked the item. Identified players only - a synthetic per-connection id never gets a row.")
+				.Append("Ranked by earnings. Earnings are sales credited to the player who caught the item. Only players who joined with Driftwood or DriftwoodConnect are counted.")
 				.Append(NewLine).Append("File: ").Append(CatchLedger.Path_);
 			return builder.ToString();
 		}
@@ -690,25 +690,25 @@ namespace DriftwoodHost
 				"players     who is connected: name, SteamID64, time connected",
 				"version     Driftwood host and How to Fish build",
 				"world       world name and auto-save interval",
-				"save        flush the world to disk now",
-				"snapshot    save, then archive the world",
-				"snapshots   list the archives on this server",
+				"save        save the world now",
+				"snapshot    save the world, then back it up",
+				"snapshots   list this server's backups",
 				"kick <who>  remove a player (SteamID64 or name); they can reconnect",
 				"block <who> keep a player out until unblocked (kicks them too)",
 				"unblock <id> let a blocked player back in",
 				"blocked     the block list, with ids",
 				"say <text>  send a [Server] line to every player's chat",
 				"audit [n]   the last n owner actions on this server (default 20)",
-				"money [add|remove <n>]  the crew's ONE shared wallet: show it, or change it",
+				"money [add|remove <n>]  the crew's shared wallet: show it or change it",
 				"island [next|prev|set <n>]  where the crew is; move everyone together (islands are numbered from 1)",
 				"spawn <item>  drop one of the game's spawnable items next to a connected player",
 				"killboss    end the active boss fight as a kill (trophy and progression included)",
 				"rescue <who>  send a player back to the island spawn (what !stuck does, from your side)",
 				"top [n]     the catch leaderboard: catches, earnings, bosses, playtime per player",
 				"",
-				"Players can type !help, !stuck, !playtime and !top in the game's chat - nothing to install.",
-				"Blocks key on the SteamID64, never the name - names are display text anybody can change.",
-				"Stop and restart live in your hosting panel or supervisor: they flush and back up first."
+				"Players can type !help, !stuck, !playtime and !top in the game's chat.",
+				"Blocks use the SteamID64, never the name. Anyone can change their name.",
+				"Stop and restart are in your server panel or DriftwoodServer.exe. They save the world and back it up first."
 			});
 		}
 
@@ -731,7 +731,7 @@ namespace DriftwoodHost
 			builder.Append("top board ").Append(readiness.LeaderboardState.Length == 0 ? "(not sampled yet)" : readiness.LeaderboardState).Append('\n');
 			builder.Append("fps       ").Append(readiness.ActualFrameRate.ToString("0.#"))
 				.Append(readiness.FrameLimiterActive ? " (capped at " + readiness.EffectiveTargetFrameRate + ")" : " (uncapped)");
-			if (config != null && config.PauseWorldWhenEmpty && readiness.WorldPaused) builder.Append("\nworld clock is PAUSED - nobody is connected");
+			if (config != null && config.PauseWorldWhenEmpty && readiness.WorldPaused) builder.Append("\nworld is paused: nobody is connected");
 			return builder.ToString();
 		}
 
@@ -742,7 +742,7 @@ namespace DriftwoodHost
 		// identity design exists to prevent.
 		private static string Players(Readiness readiness)
 		{
-			if (!readiness.WorldRunning) return "unknown - the world is not running";
+			if (!readiness.WorldRunning) return "unknown: the world isn't running";
 			List<PlayerDirectory.Row> rows = PlayerDirectory.Snapshot();
 			if (rows.Count == 0) return "nobody is connected";
 			StringBuilder builder = new StringBuilder();

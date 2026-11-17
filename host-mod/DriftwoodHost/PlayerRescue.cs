@@ -43,9 +43,9 @@ namespace DriftwoodHost
 			try
 			{
 				if (Server.Instance == null || !Server.Instance.IsServerInitialized)
-					return "the world is not running.";
+					return "the world isn't running.";
 				if (player == null || player.IsDeinitializing)
-					return "you are not in the world right now.";
+					return "you're not in the world right now.";
 				NetworkConnection owner = player.Owner;
 				if (owner == null || !owner.IsValid)
 					return "your connection is already gone.";
@@ -54,9 +54,9 @@ namespace DriftwoodHost
 				// island that is on its way out, and the game itself refuses island triggers for
 				// five seconds after a swap for the same reason.
 				if (IslandManager.IsLoading || OnlineIslandManager.TeleportPlayers)
-					return "the crew is moving islands right now - try again in a few seconds.";
+					return "the crew is moving islands. Try again in a few seconds.";
 				if (Time.time - OnlineIslandManager.TimeWhenSwappingIsland < 5f)
-					return "the island just changed - try again in a few seconds.";
+					return "the island just changed. Try again in a few seconds.";
 				if (Island.CurIsland == null)
 					return "no island is loaded right now.";
 				Vector3 spawn;
@@ -73,7 +73,7 @@ namespace DriftwoodHost
 				try { downed = player.Vitals != null && player.Vitals.Health <= 0; } catch { }
 				try { downed = downed || (player.Dying != null && player.Dying.IsDead); } catch { }
 				if (downed)
-					return "you are down - hold the mouse button to give up and respawn instead.";
+					return "you're down. Hold the mouse button to give up and respawn instead.";
 
 				// The game blocks giving up during a boss fight; a teleport to shore is the
 				// same escape hatch by another name. Mirror the game's rule.
@@ -84,7 +84,7 @@ namespace DriftwoodHost
 					bool bossDead = false;
 					try { bossDead = boss._hp.Value <= 0; } catch { }
 					if (!bossDead)
-						return "a boss fight is on - !stuck is off until it ends.";
+						return "!stuck is off until the boss fight ends.";
 				}
 
 				// The driver is glued to the wheel: the client snaps the driver's body to the
@@ -97,7 +97,7 @@ namespace DriftwoodHost
 					Player driver = null;
 					try { driver = boat.Driver; } catch { }
 					if (driver == player)
-						return "you are driving the boat - step away from the wheel first.";
+						return "you're driving the boat. Step away from the wheel first.";
 				}
 
 				where = "island spawn (" + spawn.x.ToString("0.#") + ", " + spawn.y.ToString("0.#") + ", " + spawn.z.ToString("0.#") + ")";
