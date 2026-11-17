@@ -15,37 +15,35 @@
 
 # DriftwoodServer
 
-DriftwoodServer runs a How to Fish dedicated server on Windows. Players join with the [Driftwood app](https://github.com/HumanGenome/Driftwood), or with its DriftwoodConnect mod from [Thunderstore](https://thunderstore.io/c/how-to-fish/p/HumanGenome/DriftwoodConnect/).
+How to Fish has no dedicated server. Its co-op runs in a Steam lobby on one player's PC. DriftwoodServer runs How to Fish as a dedicated server on Windows. Players join by IP with the [Driftwood app](https://github.com/HumanGenome/Driftwood), or with its DriftwoodConnect mod from [Thunderstore](https://thunderstore.io/c/how-to-fish/p/HumanGenome/DriftwoodConnect/).
 
-How to Fish has no dedicated server of its own: its co-op runs in a Steam lobby on one player's PC. DriftwoodServer runs the game headless on a Windows machine with a public IP and port. Every player needs their own Steam copy of the game.
-
-## What it does
+## Features
 
 ### 🧭 Join by IP
-Players add your server's address in the Driftwood app and press **Connect**, or type it into How to Fish's own **Join Game** box. Each player loads the character saved under their own Steam account, whatever order the crew joins in.
+Players add your server's IP and port in the Driftwood app and press **Connect**, or type it into How to Fish's own **Join Game** box. Each player loads the character saved under their own Steam account, whatever order the crew joins in.
 
 ### 💾 World backups
 `--snapshot` saves the world and zips it while the server runs. From the app's World window, the owner takes, downloads and restores snapshots and uploads a save from their PC. A restore is put in place at the next start, before the world loads, so the running game cannot write the old world back over it.
 
 ### 🖥️ Server console
-The owner connects the app's Console tab with the server's admin password: status, players, saves and snapshots, kick and block, a `[Server]` line in everyone's chat, the crew's shared wallet, moving the crew to another island, and `rescue` for a stuck player. Every console call is signed with that password.
+The owner connects the app's Console tab with the server's admin password: status, players, saves and backups, kick and block, a `[Server]` line in everyone's chat, the crew's shared wallet, moving the crew to another island, and sending a stuck player back to the island spawn.
 
 ### 💬 Chat commands and a catch leaderboard
 Players type `!help`, `!stuck` (back to the island spawn), `!playtime` and `!top` into the game's own chat. The leaderboard credits each sale at the sell box to the player who caught the fish and keeps catches, earnings, bosses and playtime.
 
 ### 🔔 Discord alerts
-Point the server at a Discord webhook and it posts joins and leaves, boss kills, island moves and blocked join attempts.
+Point the server at a Discord webhook and it posts joins and leaves, boss kills, island moves and blocked players trying to join.
 
 ### 🛡️ Game update check
-The server starts only on the game build you pinned. If a game update moved something the server depends on, it refuses to host and names what moved, instead of starting a server nobody can join.
+The server starts only on the game version you checked it against. If a How to Fish update changed something the server needs, it won't start and names what changed, instead of running a server nobody can join.
 
 ### ⏸️ Pause when empty
-Optional (`pauseWorldWhenEmpty`). With nobody on, the world stands still and the server uses much less CPU. The world is saved first, and the first player to join wakes it.
+Optional. With nobody on, the world stands still and the server uses much less CPU. The world is saved first, and the first player to join starts it again.
 
 ## What you need
 
 - Windows 10, 11 or Server, x64
-- Your own Steam copy of How to Fish, installed. The server runs the game's files, and this repo ships none of them. Release 0.1.16 hosts game 1.1.x (tested on 1.1.3); releases before 0.1.9 do not start on 1.1.x.
+- Your own Steam copy of How to Fish, installed. Use the latest release: its `build-check.txt` lists the game versions it was checked on.
 - [Git](https://git-scm.com/downloads) and the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0), both free, used once in step 4
 - Two open ports: one UDP port for the game, plus the TCP port directly above it
 
@@ -59,7 +57,7 @@ C:\Driftwood\my-server\
   Saves\              the world lives here
   host-state\         status, logs, the stop file
   Backups\
-  bin\                the supervisor
+  bin\                DriftwoodServer.exe
   appsettings.json
 ```
 
@@ -73,7 +71,7 @@ Optional: also copy `steamapps\appmanifest_4001890.acf` into `C:\Driftwood\my-se
 
 ### 3. Add the server files to the game
 
-Download `DriftwoodServer-<version>.zip` from the [latest release](https://github.com/HumanGenome/DriftwoodServer/releases/latest) and extract it somewhere temporary, not into the game folder. Everything in the zip nests under `DriftwoodServer\bepinex\`, and extracted straight into the game folder nothing loads: the game boots vanilla, silently, with no error anywhere.
+Download `DriftwoodServer-<version>.zip` from the [latest release](https://github.com/HumanGenome/DriftwoodServer/releases/latest) and extract it somewhere temporary, not into the game folder. Everything in the zip sits under `DriftwoodServer\bepinex\`. Extracted straight into the game folder, nothing loads and the game starts unmodded with no error.
 
 Copy the pieces in from where you extracted them:
 
@@ -87,9 +85,9 @@ Copy-Item "$overlay\BepInEx"             $game -Recurse -Force
 
 Done when `winhttp.dll` and `doorstop_config.ini` sit next to `How to Fish.exe`, and `BepInEx\plugins\DriftwoodHost.dll` exists.
 
-### 4. Build the supervisor
+### 4. Build DriftwoodServer.exe
 
-The supervisor is the program that starts the server, watches it, and takes the backups. The release zip does not include it; build it from this repo with two commands:
+DriftwoodServer.exe starts the server, watches it and takes the backups. The release zip doesn't include it. Build it from this repo with two commands:
 
 ```powershell
 git clone https://github.com/HumanGenome/DriftwoodServer.git
@@ -111,13 +109,13 @@ Optional: put a Steam Web API key in `SteamWebApiKeyFile` (see protocol/config.m
 
 Leave `worldName` alone once the server has run. Renaming it later starts a fresh world under the new name; the old world stays in `Saves\` under the old one.
 
-Last, pin the game build. The server refuses to start until you pin the build you copied, and that is what stops a Steam update from silently breaking your server. Set `pinnedBuild.assemblySha256` to 64 zeros, then ask the install for its real values:
+Last, pin the game build. The server won't start until you pin the build you copied, so a Steam update can't break your server without you knowing. Set `pinnedBuild.assemblySha256` to 64 zeros, then ask the install for its real values:
 
 ```powershell
 C:\Driftwood\my-server\bin\DriftwoodServer.exe --verify-build C:\Driftwood\my-server\appsettings.json
 ```
 
-It prints `BUILD_PIN_FAILED` plus the truth:
+It prints `BUILD_PIN_FAILED` and the real values:
 
 ```
 assemblySha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
@@ -126,7 +124,7 @@ steamBuildId=19842631
 
 Paste both into `pinnedBuild` (`buildId` stays `""` if you skipped the steamapps copy), run it again, and expect `BUILD_PIN_OK`.
 
-When Steam updates the game: update your Steam copy, copy the game folder again, run `--verify-build` again, and paste in the new values. If the update moved something the server depends on, it names what moved and refuses to host; take the next release of this package.
+When Steam updates the game: update your Steam copy, copy the game folder again, run `--verify-build` again, and paste in the new values. If the update changed something the server needs, it names what changed and won't start. Wait for the next DriftwoodServer release.
 
 ### 6. Open the ports
 
@@ -155,9 +153,9 @@ Everyone joins from the Driftwood app: add `<your address>:22003`, then **Connec
 
 - **Stop:** `Ctrl+C` in the console, or create a file named `stop.requested` in `host-state\`. Either way the world is saved before the process exits.
 - **Back up, while it runs:** `DriftwoodServer.exe --snapshot appsettings.json` saves the world and zips it into `Backups\`.
-- **It will not start?** Read `host-state\status.json`. `reason` is one plain sentence, and the common ones are decoded in [docs/operations.md](docs/operations.md). The game's own output is in `host-state\unity.log`.
+- **It won't start?** Read `host-state\status.json`. `reason` is one plain sentence, and the common ones are explained in [docs/operations.md](docs/operations.md). The game's own output is in `host-state\unity.log`.
 - **Survive reboots:** a Task Scheduler task, *At startup*, running the step 7 command.
-- **After a crash:** the supervisor writes "This server stopped unexpectedly" to `status.json` and exits; it does not start the game again by itself. Run the step 7 command again.
+- **After a crash:** DriftwoodServer.exe writes "This server stopped unexpectedly" to `status.json` and exits. It doesn't start the game again by itself. Run the step 7 command again.
 - **More servers on the same machine:** repeat from step 1 in a second folder with its own ports, ten apart (22013, 22023, ...).
 
 ## Ports
@@ -171,25 +169,25 @@ Keep 22003 and its neighbours rather than 7777: many games default to 7777, and 
 
 ## Settings
 
-The settings you can change, in `appsettings.json`. The supervisor writes the host's own config file from these on every start, so a hand edit there does not last; [protocol/config.md](protocol/config.md) lists every key the host reads.
+The settings you can change, in `appsettings.json`. DriftwoodServer.exe rewrites the host's own config file from these on every start, so a hand edit there doesn't last. [protocol/config.md](protocol/config.md) lists every key the host reads.
 
 | Setting | Default | What it does |
 |---|---|---|
 | `serverName` | empty | The name players see in the Driftwood app |
 | `authToken` | empty | The admin password for the Console tab and World window. Empty refuses every admin call |
 | `gamePort` | `22003` | The UDP port players connect to |
-| `slots` | `8` | How many players fit. A full server turns the next player away. How to Fish's Steam page says 1-4 players |
+| `slots` | `8` | How many players fit. A full server turns the next player away. How to Fish's Steam page says 1 to 4 players |
 | `worldName` | `Driftwood` | The world's file name in `Saves\`. A new name starts a new world |
 | `autoSaveMinutes` | `5` | How often the game saves the world |
 | `friendlyFire` | `true` | Players can hurt each other, as in the game's own default |
 | `oneShotKills` | `false` | The game's own One Shot option |
 | `pauseWorldWhenEmpty` | `false` | Stand the world still while nobody is on (see [Pause when empty](#%EF%B8%8F-pause-when-empty)) |
-| `discordWebhookUrl` | empty | A Discord webhook for joins and leaves, boss kills, island moves and blocked join attempts. A file named `discord-webhook.txt` in `C:\Driftwood\my-server\Driftwood\` does the same and wins when both are set |
+| `discordWebhookUrl` | empty | A Discord webhook for joins and leaves, boss kills, island moves and blocked players trying to join. A file named `discord-webhook.txt` in `C:\Driftwood\my-server\Driftwood\` does the same and wins when both are set |
 | `pinnedBuild` | | The game build this server accepts (step 5) |
 
 ## Rent a server
 
-[SurvivalServers.com](https://www.survivalservers.com/services/game_servers/how_to_fish/?utm_source=github&utm_medium=readme_install&utm_campaign=driftwoodserver) runs How to Fish servers with Driftwood installed and the ports open.
+[SurvivalServers.com](https://www.survivalservers.com/services/game_servers/how_to_fish/?utm_source=github&utm_medium=readme_install&utm_campaign=driftwoodserver) runs How to Fish servers with DriftwoodServer installed.
 
 ## Build from source
 
@@ -203,11 +201,11 @@ The host mod (`host-mod/DriftwoodHost`) compiles against the game's own assembli
 
 ## Releases
 
-Each [release](https://github.com/HumanGenome/DriftwoodServer/releases) carries `DriftwoodServer-<version>.zip`, the files step 3 copies into the game, and notes on what changed. From 0.1.12 a release also carries `SHA256SUMS.txt`, the zip's SHA-256, and `build-check.txt`, the game builds the host was checked against. The full history is in [CHANGELOG.md](CHANGELOG.md). The player app's releases are on the [Driftwood repo](https://github.com/HumanGenome/Driftwood/releases).
+Each [release](https://github.com/HumanGenome/DriftwoodServer/releases) carries `DriftwoodServer-<version>.zip`, the files step 3 copies into the game, and notes on what changed. Newer releases also carry `SHA256SUMS.txt`, the zip's SHA-256, and `build-check.txt`, the game builds the server was checked against. The full history is in [CHANGELOG.md](CHANGELOG.md). The player app's releases are on the [Driftwood repo](https://github.com/HumanGenome/Driftwood/releases).
 
 ## Contributing
 
-Bug reports go to [this repo's issues](https://github.com/HumanGenome/DriftwoodServer/issues), with the server version, the game build and the `reason` from `host-ready.json` if it will not start. See [CONTRIBUTING.md](CONTRIBUTING.md) before a pull request. Security issues go through [private reporting](.github/SECURITY.md), never a public issue.
+Bugs: [open an issue](https://github.com/HumanGenome/DriftwoodServer/issues) with the server version, the game build and the `reason` from `host-ready.json` if it won't start. See [CONTRIBUTING.md](CONTRIBUTING.md) before a pull request. Security problems go through [private reporting](.github/SECURITY.md), never a public issue.
 
 ## Community note
 
