@@ -2,6 +2,8 @@ namespace DriftwoodServer;
 
 internal static class Program
 {
+    internal const int WillNotHostExitCode = 4;
+
     private static async Task<int> Main(string[] args)
     {
         try
@@ -49,16 +51,20 @@ internal static class Program
             using IDisposable shutdownSignals = ShutdownSignals.Register(shutdown);
             Console.CancelKeyPress += cancelHandler;
             AppDomain.CurrentDomain.ProcessExit += exitHandler;
+            HostApplication host = new(options);
             try
             {
-                await new HostApplication(options).RunAsync(shutdown.Token).ConfigureAwait(false);
+                await host.RunAsync(shutdown.Token).ConfigureAwait(false);
             }
             finally
             {
                 Console.CancelKeyPress -= cancelHandler;
                 AppDomain.CurrentDomain.ProcessExit -= exitHandler;
             }
-            return 0;
+            // 4 = the run ended in "will not host" (status.json has the reason). 0 = a requested
+            // stop. Both used to exit 0, so a crash looked like a clean stop to anything watching
+            // the process.
+            return host.Refused ? WillNotHostExitCode : 0;
         }
         catch (OperationCanceledException)
         {

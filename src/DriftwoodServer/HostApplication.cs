@@ -11,6 +11,11 @@ internal sealed class HostApplication
         _status = new StatusStore(options);
     }
 
+    // True once this run has written "will not host" (a refused start, a world that did not
+    // load, or a game that stopped unexpectedly). Program turns it into a non-zero exit code, so a
+    // service manager or scheduled task set to restart on failure sees a failure, not a clean exit.
+    public bool Refused { get; private set; }
+
     public async Task RunAsync(CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(_options.StateRoot);
@@ -246,6 +251,7 @@ internal sealed class HostApplication
 
     private void Refuse(string reason, string pinnedBuildId, int gamePid = 0, ReadinessDocument? readiness = null)
     {
+        Refused = true;
         Console.Error.WriteLine($"DRIFTWOOD WILL NOT HOST: {reason}");
         _status.Write(HostPhase.WillNotHost, reason, gamePid, readiness, pinnedBuildId);
     }

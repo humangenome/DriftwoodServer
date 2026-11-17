@@ -108,6 +108,35 @@ public class BuildPinTests : IDisposable
         Assert.False(Verify(_assemblyHash, "24866339").Ok);
     }
 
+    [Fact]
+    public async Task ARefusedStartIsReportedAsAFailureNotACleanExit()
+    {
+        // The supervisor used to exit 0 after "will not host", so a crash looked like a clean stop
+        // to a service manager. A refused run now says so, and Program exits non-zero on it.
+        WriteManifest("24866339", "0", "4", "0");
+        HostOptions options = new()
+        {
+            InstanceId = "gs1",
+            GameRoot = _gameRoot,
+            StateRoot = Path.Combine(_root, "state"),
+            SaveRoot = Path.Combine(_root, "saves"),
+            SteamAppsDirectory = _steamApps,
+            GamePort = 22003,
+            HttpPort = 22004
+        };
+        options.PinnedBuild.AssemblyRelativePath = _assemblyRelative;
+        options.PinnedBuild.AssemblySha256 = new string('0', 64);
+        options.PinnedBuild.AppId = 4001890;
+        options.PinnedBuild.BuildId = "24866339";
+
+        HostApplication host = new(options);
+        await host.RunAsync(CancellationToken.None);
+
+        Assert.True(host.Refused);
+        Assert.NotEqual(0, Program.WillNotHostExitCode);
+        Assert.True(File.Exists(Path.Combine(options.StateRoot, "status.json")));
+    }
+
     public void Dispose()
     {
         try { Directory.Delete(_root, true); } catch { }
