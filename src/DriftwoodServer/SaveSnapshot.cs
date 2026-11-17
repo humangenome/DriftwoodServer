@@ -62,7 +62,7 @@ internal sealed class SaveSnapshot
         try
         {
             if (File.Exists(staging)) File.Delete(staging);
-            ZipFile.CreateFromDirectory(_options.SaveRoot, staging, CompressionLevel.Optimal, false);
+            ZipSaveTree(_options.SaveRoot, staging);
 
             // Verify by READING BACK, never by a successful write. A publish that only checks its
             // own return value is a claim about the write, not about what comes out.
@@ -92,6 +92,37 @@ internal sealed class SaveSnapshot
             try { if (File.Exists(staging)) File.Delete(staging); } catch { }
         }
     }
+
+    // The save tree, zipped without following links. ZipFile.CreateFromDirectory walks into a
+    // junction or symbolic link inside the save folder and copies whatever it points at, so a link
+    // left there would put files from elsewhere on the PC into every backup. The game writes plain
+    // files only, so a link is never part of a world: skip it, the same way SaveTreeQuiescence
+    // skips links when it decides the save has settled. Empty folders are kept, as
+    // CreateFromDirectory kept them.
+    internal static void ZipSaveTree(string root, string zipPath)
+    {
+        EnumerationOptions options = new()
+        {
+            RecurseSubdirectories = true,
+            IgnoreInaccessible = false,
+            AttributesToSkip = FileAttributes.ReparsePoint,
+            MatchCasing = MatchCasing.PlatformDefault
+        };
+        using FileStream stream = new(zipPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+        using ZipArchive archive = new(stream, ZipArchiveMode.Create);
+        foreach (string directory in Directory.EnumerateDirectories(root, "*", options))
+        {
+            if (!Directory.EnumerateFileSystemEntries(directory, "*", options).Any())
+                archive.CreateEntry(EntryName(root, directory) + "/");
+        }
+        foreach (string file in Directory.EnumerateFiles(root, "*", options))
+        {
+            archive.CreateEntryFromFile(file, EntryName(root, file), CompressionLevel.Optimal);
+        }
+    }
+
+    private static string EntryName(string root, string path) =>
+        Path.GetRelativePath(root, path).Replace(Path.DirectorySeparatorChar, '/');
 
     private async Task<bool> RequestSaveAsync(string authToken, CancellationToken cancellationToken)
     {

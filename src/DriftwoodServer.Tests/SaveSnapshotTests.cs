@@ -58,6 +58,36 @@ public class SaveSnapshotTests : IDisposable
     }
 
     [Fact]
+    public async Task LeavesLinksInsideTheSaveFolderOutOfTheBackup()
+    {
+        // A link inside the save folder must not pull files from elsewhere on the PC into the
+        // backup: CreateFromDirectory followed it. Plain files and folders still go in.
+        File.WriteAllText(Path.Combine(_options.SaveRoot, "Driftwood.txt"), "{\"Name\":\"Driftwood\"}");
+        Directory.CreateDirectory(Path.Combine(_options.SaveRoot, "Players"));
+        File.WriteAllText(Path.Combine(_options.SaveRoot, "Players", "p.txt"), "{}");
+        Directory.CreateDirectory(Path.Combine(_options.SaveRoot, "Empty"));
+        string outside = Path.Combine(_root, "outside");
+        Directory.CreateDirectory(outside);
+        File.WriteAllText(Path.Combine(outside, "private.txt"), "not part of the world");
+        try
+        {
+            Directory.CreateSymbolicLink(Path.Combine(_options.SaveRoot, "linked-folder"), outside);
+            File.CreateSymbolicLink(Path.Combine(_options.SaveRoot, "linked-file.txt"), Path.Combine(outside, "private.txt"));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            return; // This machine cannot make links; nothing to prove here.
+        }
+
+        SaveSnapshot.Result result = await new SaveSnapshot(_options).CaptureAsync("token", CancellationToken.None);
+
+        Assert.True(result.Ok, result.Reason);
+        using ZipArchive archive = ZipFile.OpenRead(result.Path);
+        string[] names = archive.Entries.Select(entry => entry.FullName).OrderBy(name => name, StringComparer.Ordinal).ToArray();
+        Assert.Equal(new[] { "Driftwood.txt", "Empty/", "Players/p.txt" }, names);
+    }
+
+    [Fact]
     public async Task RefusesWhenNoBackupFolderIsConfigured()
     {
         _options.BackupRoot = string.Empty;
