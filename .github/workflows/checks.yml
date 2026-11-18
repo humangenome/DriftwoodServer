@@ -33,6 +33,10 @@ jobs:
         env:
           DRIFTWOOD_LEAK_WORDS: ${{ secrets.DRIFTWOOD_LEAK_WORDS }}
         run: ./tools/ci/check-leaks.sh
+      - name: Licence notices and the LGPL source archive
+        run: |
+          python3 scripts/test-verify-release-notices.py
+          python3 scripts/test-lgpl-source.py
       - name: Required-files declaration
         run: ./tools/ci/check-required-files.sh
       # .NET 9 and later mark an exe CET-compatible by default, and such an exe refuses to start on some

@@ -9,6 +9,8 @@
 # Produces, under dist/release/<tag>/:
 #
 #   DriftwoodServer-<version>.zip   the overlay bundle
+#   UnityDoorstop-4.5.0-source.zip  the complete source of the LGPL loader the bundle ships
+#                                   (scripts/lgpl-source.py), attached to the same release
 #
 # What it does NOT do: publish. Uploading is a separate, private step.
 #
@@ -302,6 +304,11 @@ for m in "${SERVER_PLUGINS[@]}"; do
   cp -a "$MODS_DIR/$m/bin/Release/netstandard2.1/$m.dll" "$PACK/BepInEx/plugins/$m.dll"
 done
 
+# Licence notices beside the bepinex\ folder (the host copies only bepinex\, so these stay with the
+# bundle): our MIT licence, and the licences of the BepInEx loader and its libraries.
+cp -f "$ROOT/LICENSE" "$STAGE/DriftwoodServer/LICENSE.txt"
+cp -f "$ROOT/THIRD-PARTY-NOTICES.txt" "$STAGE/DriftwoodServer/THIRD-PARTY-NOTICES.txt"
+
 # Dev droppings must not ride along. .pdb in particular: PathMap keeps the build
 # path out of them, but they are still debug artifacts nobody downloads on purpose.
 find "$PACK" \( -name '*.log' -o -name 'LogOutput.log' -o -name '*.pdb' -o -name '.dev-build' \) -delete 2>/dev/null || true
@@ -316,6 +323,8 @@ REQUIRED=(
   "DriftwoodServer/bepinex/BepInEx/core/BepInEx.dll"
   "DriftwoodServer/bepinex/BepInEx/core/BepInEx.Preloader.dll"
   "DriftwoodServer/bepinex/BepInEx/plugins/DriftwoodHost.dll"
+  "DriftwoodServer/LICENSE.txt"
+  "DriftwoodServer/THIRD-PARTY-NOTICES.txt"
 )
 for rel in "${REQUIRED[@]}"; do
   [[ -f "$STAGE/$rel" ]] || die "staged bundle is missing $rel"
@@ -399,6 +408,15 @@ cp "$BUILD_CHECK_LOG" "$OUT_DIR/build-check.txt"
 unzip -tqq "$OVERLAY_ZIP" >/dev/null || die "the packed zip does not verify"
 unzip -l "$OVERLAY_ZIP" | grep -q 'DriftwoodServer/bepinex/BepInEx/plugins/DriftwoodHost.dll' \
   || die "packed zip does not contain the host plugin at the path the cache reads"
+python3 "$ROOT/scripts/verify-release-notices.py" server "$OVERLAY_ZIP" \
+  || die "the bundle is missing a licence notice -- nothing here ships"
+
+# The LGPL loader's complete source goes on the same release: built from the pinned upstream
+# commit and checked file by file, so a release folder without it (or with the wrong one) fails here.
+say "UnityDoorstop 4.5.0 source -> UnityDoorstop-4.5.0-source.zip"
+python3 "$ROOT/scripts/lgpl-source.py" build "$OUT_DIR" >/dev/null || die "could not build the LGPL source archive"
+python3 "$ROOT/scripts/lgpl-source.py" check "$OUT_DIR" || die "the release folder lacks the LGPL source archive"
+( cd "$OUT_DIR" && sha256sum UnityDoorstop-4.5.0-source.zip ) >> "$OUT_DIR/SHA256SUMS.txt"
 
 # Fold into the release checksum file when one already exists.
 if [[ -f "$OUT_DIR/checksums.txt" ]] && ! grep -q "DriftwoodServer-$VERSION.zip" "$OUT_DIR/checksums.txt"; then
@@ -421,6 +439,7 @@ only proof the edge serves what was built.
 Attach to the GitHub release with the bundle:
   $OUT_DIR/SHA256SUMS.txt
   $OUT_DIR/build-check.txt
+  $OUT_DIR/UnityDoorstop-4.5.0-source.zip
 
 Next:
   1. Publish:  upload the bundle to wherever your hosts download it from.
