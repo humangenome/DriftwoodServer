@@ -32,10 +32,22 @@ namespace DriftwoodHost
 		internal const string DamagedWords = "Your world is safe. That zip is damaged. Make the zip again and upload it.";
 		internal const string TooManyFilesWords = "Your world is safe. That zip has more than 1,000 files. Zip only the Saves folder and try again.";
 		internal const string LinkWords = "Nothing was changed. A folder on this server points somewhere else, so the restore stopped. Contact your host.";
+		// A backup or an upload refused because the snapshot store is a link (approved 2026-11-18).
+		internal const string BackupLinkWords = "Nothing was changed. A folder on this server points somewhere else, so the backup stopped. Contact your host.";
 
-		// The folder behind the last LinkWords refusal, for the host log. Callers hold the
-		// snapshot store's lock.
+		// The folder behind the last LinkWords or BackupLinkWords refusal, for the host log. Callers
+		// hold the snapshot store's lock.
 		internal static string LastLinkProblem;
+
+		// Null when a backup or an upload may write into the snapshot store, else the owner's words
+		// (BackupLinkWords); which folder it was is in LastLinkProblem.
+		internal static string StoreLinkProblem(string instanceRoot, string snapshotDirectory)
+		{
+			string problem = FolderLinks.Problem(instanceRoot, snapshotDirectory);
+			if (problem == null) return null;
+			LastLinkProblem = problem;
+			return BackupLinkWords;
+		}
 
 		// The staged-restore folder inside the snapshot store. The leading dot keeps it out of the
 		// *.zip listing.

@@ -457,4 +457,24 @@ public class RestoreImportTests : IDisposable
         Assert.Equal(1000, SnapshotFiles.MaxEntries);
         Assert.Contains("1,000 files", SnapshotFiles.TooManyFilesWords);
     }
+
+    // A backup or an upload refused for a linked snapshot store says "backup"; a restore keeps its own
+    // sentence (both approved 2026-11-18).
+    [Fact]
+    public void ABackupOrUploadRefusedForALinkedStoreSaysBackupAndARestoreSaysRestore()
+    {
+        Assert.Null(SnapshotFiles.StoreLinkProblem(_instance, _snapshots));
+
+        string target = Path.Combine(_elsewhere, "zips");
+        Directory.CreateDirectory(target);
+        if (Directory.Exists(_snapshots)) Directory.Delete(_snapshots, true);
+        FolderLink(_snapshots, target);
+
+        Assert.Equal("Nothing was changed. A folder on this server points somewhere else, so the backup stopped. Contact your host.",
+            SnapshotFiles.StoreLinkProblem(_instance, _snapshots));
+        Assert.Contains("is a link or junction", SnapshotFiles.LastLinkProblem);
+
+        Assert.False(SnapshotFiles.Stage(Zip("restore.zip", ("Driftwood.txt", "restored")), _instance, _snapshots, _saves, out string failure));
+        Assert.Equal("Nothing was changed. A folder on this server points somewhere else, so the restore stopped. Contact your host.", failure);
+    }
 }

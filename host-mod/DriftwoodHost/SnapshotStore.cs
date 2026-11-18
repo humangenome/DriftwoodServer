@@ -452,10 +452,10 @@ namespace DriftwoodHost
 		// approved sentence; which folder it was goes to the host log.
 		private static string StoreLinkProblem()
 		{
-			string problem = FolderLinks.Problem(_instanceRoot, _snapshotDirectory);
-			if (problem == null) return null;
-			Plugin.Log?.LogError("World backups refused: " + problem + "; nothing was changed.");
-			return SnapshotFiles.LinkWords;
+			string words = SnapshotFiles.StoreLinkProblem(_instanceRoot, _snapshotDirectory);
+			if (words != null)
+				Plugin.Log?.LogError("World backups refused: " + SnapshotFiles.LastLinkProblem + "; nothing was changed.");
+			return words;
 		}
 
 		// Called by the HTTP layer AFTER the response has been written, so the launcher sees
