@@ -65,6 +65,11 @@
     <Compile Include="../../host-mod/DriftwoodHost/HostFiles.cs" Link="Linked/HostFiles.cs" />
     <Compile Include="../../host-mod/DriftwoodHost/WorldSwap.cs" Link="Linked/WorldSwap.cs" />
     <Compile Include="../../host-mod/DriftwoodHost/MainThread.cs" Link="Linked/MainThread.cs" />
+    <!-- World restore imports: the link checks on every folder a restore writes into, moves
+         through or deletes, the unpack with its size and file-count caps, and pruning the
+         snapshot store. The game half (saving first, ending the process) stays in SnapshotStore. -->
+    <Compile Include="../../host-mod/DriftwoodHost/FolderLinks.cs" Link="Linked/FolderLinks.cs" />
+    <Compile Include="../../host-mod/DriftwoodHost/SnapshotFiles.cs" Link="Linked/SnapshotFiles.cs" />
     <!-- Where the owner's spawn command drops an item when a player has not moved since joining.
          The Unity half (OwnerGameplay.SpawnItem) only reads positions and carries the choice out. -->
     <Compile Include="../../host-mod/DriftwoodHost/SpawnPlacement.cs" Link="Linked/SpawnPlacement.cs" />

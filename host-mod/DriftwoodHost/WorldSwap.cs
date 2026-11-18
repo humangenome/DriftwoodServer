@@ -28,14 +28,39 @@ namespace DriftwoodHost
 	//   3. move the incoming files into the save folder.
 	// A failure in 1 changes nothing. A failure in 2 or 3 moves everything back. Moves within one
 	// folder tree are renames, so 2 and 3 do not copy any data.
+	//
+	// LINKS. The staged folder, the save folder and the two side folders must be real folders,
+	// and a staged file must be a real file, checked before anything happens and again right
+	// before every copy and move. A link at any of them would send the world's files somewhere
+	// else, or bring files from somewhere else into the world.
 	internal static class WorldSwap
 	{
+		// Tests only: runs right before the check that guards each copy or move, with that file's
+		// destination, so a test can swap a folder for a link at exactly that moment. Null otherwise.
+		internal static Action<string> TestBeforeMove { get; set; }
+
+		internal static string IncomingFolder(string saveDirectory)
+		{
+			return Trimmed(saveDirectory) + ".restore-incoming";
+		}
+
+		internal static string ReplacedFolder(string saveDirectory)
+		{
+			return Trimmed(saveDirectory) + ".restore-replaced";
+		}
+
 		internal static WorldSwapResult Apply(string staging, string saveDirectory, out string failure)
 		{
 			failure = null;
-			string trimmed = saveDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-			string incoming = trimmed + ".restore-incoming";
-			string replaced = trimmed + ".restore-replaced";
+			string incoming = IncomingFolder(saveDirectory);
+			string replaced = ReplacedFolder(saveDirectory);
+
+			string link = FolderLinks.FirstProblem(null, staging, saveDirectory, incoming, replaced);
+			if (link != null)
+			{
+				failure = link + ", so nothing was changed";
+				return WorldSwapResult.Untouched;
+			}
 
 			// A "replaced" folder that still holds files is a previous swap that could not put the
 			// old world back. It may be the only copy of that world, so it is never cleared here.
@@ -54,7 +79,16 @@ namespace DriftwoodHost
 				ResetDirectory(replaced);
 				foreach (string file in Directory.GetFiles(staging))
 				{
-					File.Copy(file, Path.Combine(incoming, Path.GetFileName(file)), true);
+					string destination = Path.Combine(incoming, Path.GetFileName(file));
+					TestBeforeMove?.Invoke(destination);
+					link = LinkProblem(file, staging, saveDirectory, incoming, replaced);
+					if (link != null)
+					{
+						failure = link + ", so nothing was changed";
+						TryDelete(incoming);
+						return WorldSwapResult.Untouched;
+					}
+					File.Copy(file, destination, true);
 				}
 			}
 			catch (Exception exception)
@@ -71,7 +105,11 @@ namespace DriftwoodHost
 				foreach (string file in Directory.GetFiles(saveDirectory))
 				{
 					string name = Path.GetFileName(file);
-					File.Move(file, Path.Combine(replaced, name));
+					string destination = Path.Combine(replaced, name);
+					TestBeforeMove?.Invoke(destination);
+					link = LinkProblem(null, saveDirectory, incoming, replaced);
+					if (link != null) throw new IOException(link);
+					File.Move(file, destination);
 					movedAside.Add(name);
 				}
 			}
@@ -88,7 +126,11 @@ namespace DriftwoodHost
 				foreach (string file in Directory.GetFiles(incoming))
 				{
 					string name = Path.GetFileName(file);
-					File.Move(file, Path.Combine(saveDirectory, name));
+					string destination = Path.Combine(saveDirectory, name);
+					TestBeforeMove?.Invoke(destination);
+					link = LinkProblem(file, saveDirectory, incoming, replaced);
+					if (link != null) throw new IOException(link);
+					File.Move(file, destination);
 					movedIn.Add(name);
 				}
 			}
@@ -108,13 +150,17 @@ namespace DriftwoodHost
 			List<string> movedIn, string incoming, ref string failure)
 		{
 			bool clean = true;
+			// Putting back goes through the same two folders, so they are checked the same way: a
+			// link that appeared there stops the put-back and the swap counts as broken.
 			foreach (string name in movedIn)
 			{
+				if (LinkProblem(null, saveDirectory, replaced) != null) { clean = false; break; }
 				try { File.Delete(Path.Combine(saveDirectory, name)); }
 				catch { clean = false; }
 			}
 			foreach (string name in movedAside)
 			{
+				if (LinkProblem(null, saveDirectory, replaced) != null) { clean = false; break; }
 				try { File.Move(Path.Combine(replaced, name), Path.Combine(saveDirectory, name)); }
 				catch { clean = false; }
 			}
@@ -128,15 +174,28 @@ namespace DriftwoodHost
 			return WorldSwapResult.Untouched;
 		}
 
+		// Null, or the first link among the folders and the one file (which may be null).
+		private static string LinkProblem(string file, params string[] folders)
+		{
+			if (file != null && FolderLinks.IsLink(file)) return "the staged file " + file + " is a link";
+			return FolderLinks.FirstProblem(null, folders);
+		}
+
 		private static void ResetDirectory(string directory)
 		{
-			if (Directory.Exists(directory)) Directory.Delete(directory, true);
+			if (!FolderLinks.DeleteIfReal(directory)) throw new IOException("the folder " + directory + " is a link or junction");
 			Directory.CreateDirectory(directory);
 		}
 
+		// Never through a link.
 		private static void TryDelete(string directory)
 		{
-			try { if (Directory.Exists(directory)) Directory.Delete(directory, true); } catch { }
+			try { FolderLinks.DeleteIfReal(directory); } catch { }
+		}
+
+		private static string Trimmed(string path)
+		{
+			return path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 		}
 
 		private static string Describe(Exception exception)

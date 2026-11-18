@@ -26,7 +26,8 @@ namespace DriftwoodHost
 	{
 		// A How to Fish world is a text file, so this bound is enormous relative to a real
 		// save. It is here to stop an upload from filling a customer's drive, not to be a
-		// realistic size.
+		// realistic size. It limits the zip; SnapshotFiles.MaxUnpackedBytes limits what comes
+		// out of it.
 		internal const long MaxImportBytes = 64L * 1024L * 1024L;
 
 		// Newest N kept. A snapshot per restore plus a manual one now and then is a slow
@@ -36,12 +37,12 @@ namespace DriftwoodHost
 
 		private static string _saveDirectory = string.Empty;
 		private static string _snapshotDirectory = string.Empty;
+		// The server's own folder. Links are checked from here down, never above it.
+		private static string _instanceRoot = string.Empty;
 		private static string _worldName = string.Empty;
 		private static readonly object Sync = new object();
-		// The staged-restore directory and its marker. The leading dot keeps it out of the
-		// *.zip listing, and the marker is written LAST so a half-extracted stage is never
-		// mistaken for a complete one.
-		private const string PendingName = ".pending-restore";
+		// The staged-restore directory's marker (the directory is SnapshotFiles.PendingName). The
+		// marker is written LAST so a half-extracted stage is never mistaken for a complete one.
 		private const string MarkerName = "restore.id";
 		private static string _pendingId = string.Empty;
 
@@ -75,6 +76,7 @@ namespace DriftwoodHost
 				_snapshotDirectory = string.Empty;
 				return;
 			}
+			_instanceRoot = root;
 			_snapshotDirectory = Path.Combine(root, "Snapshots");
 			try { System.IO.Directory.CreateDirectory(_snapshotDirectory); }
 			catch (Exception exception)
@@ -150,6 +152,8 @@ namespace DriftwoodHost
 
 			lock (Sync)
 			{
+				failure = StoreLinkProblem();
+				if (failure != null) return false;
 				string candidate = NewId(reason);
 				string path = Path.Combine(_snapshotDirectory, candidate + ".zip");
 				try
@@ -169,7 +173,7 @@ namespace DriftwoodHost
 					failure = exception.GetType().Name + ": " + exception.Message;
 					return false;
 				}
-				Prune(keepId);
+				SnapshotFiles.Prune(_instanceRoot, _snapshotDirectory, KeepNewest, keepId);
 			}
 			Plugin.Log?.LogInfo("World snapshot " + id + " taken (" + reason + ").");
 			return true;
@@ -236,6 +240,8 @@ namespace DriftwoodHost
 
 			lock (Sync)
 			{
+				failure = StoreLinkProblem();
+				if (failure != null) return false;
 				string candidate = NewId("imported");
 				string path = Path.Combine(_snapshotDirectory, candidate + ".zip");
 				try
@@ -248,7 +254,7 @@ namespace DriftwoodHost
 					failure = exception.GetType().Name + ": " + exception.Message;
 					return false;
 				}
-				Prune(null);
+				SnapshotFiles.Prune(_instanceRoot, _snapshotDirectory, KeepNewest, null);
 			}
 			return true;
 		}
@@ -293,14 +299,12 @@ namespace DriftwoodHost
 			{
 				// Extract first: a corrupt archive is caught before anything else happens, and the
 				// archive is read before the pre-restore copy below can count towards the limit.
+				// Stage refuses, with nothing changed, when a folder the restore uses is a link,
+				// and throws the staged folder away when the archive is bad or too big.
 				string pending = PendingDirectory;
 				try
 				{
-					// A previous staged restore that never got applied is superseded by this
-					// one, not merged with it.
-					if (System.IO.Directory.Exists(pending)) System.IO.Directory.Delete(pending, true);
-					System.IO.Directory.CreateDirectory(pending);
-					if (!Extract(archivePath, pending, out failure)) { Discard(pending); return false; }
+					if (!SnapshotFiles.Stage(archivePath, _instanceRoot, _snapshotDirectory, _saveDirectory, out failure)) return false;
 					if (!ReconcileWorldName(pending, out failure)) { Discard(pending); return false; }
 				}
 				catch (Exception exception)
@@ -361,6 +365,16 @@ namespace DriftwoodHost
 			string swapFailure;
 			try
 			{
+				// Links before anything moves, even the rename inside the staged folder below.
+				// WorldSwap.Apply checks again right before each of its own moves.
+				string link = SnapshotFiles.RestoreLinkProblem(_instanceRoot, _snapshotDirectory, _saveDirectory);
+				if (link != null)
+				{
+					Plugin.Log?.LogError("A staged world restore (" + id + ") could not be applied: " + link +
+						". The world on disk has NOT been changed and the staged files have been left where they are.");
+					_pendingId = id;
+					return null;
+				}
 				// The marker stays until the swap has worked, so a swap that fails is tried again at
 				// the next start instead of being forgotten with its staged files.
 				// Re-run the reconcile against the world name THIS boot is configured for. The
@@ -421,12 +435,19 @@ namespace DriftwoodHost
 
 		private static string PendingDirectory
 		{
-			get { return Path.Combine(_snapshotDirectory, PendingName); }
+			get { return SnapshotFiles.PendingDirectory(_snapshotDirectory); }
 		}
 
 		private static void Discard(string directory)
 		{
-			try { if (System.IO.Directory.Exists(directory)) System.IO.Directory.Delete(directory, true); } catch { }
+			SnapshotFiles.Discard(directory);
+		}
+
+		// Nothing is written into or deleted from a snapshot store that is a link.
+		private static string StoreLinkProblem()
+		{
+			string problem = FolderLinks.Problem(_instanceRoot, _snapshotDirectory);
+			return problem == null ? null : problem + ", so nothing was changed";
 		}
 
 		// Called by the HTTP layer AFTER the response has been written, so the launcher sees
@@ -503,81 +524,9 @@ namespace DriftwoodHost
 			}
 		}
 
-		// ZIP SLIP. An archive entry name is attacker-controlled - the launcher lets a player
-		// upload any zip they like - and "..\..\How to Fish\BepInEx\plugins\evil.dll" is a
-		// perfectly legal entry name. Every entry is resolved against the destination and
-		// refused if it lands outside it.
-		//
-		// A single common leading directory is stripped, because a customer zipping their own
-		// Saves folder produces "Saves/world.txt" and refusing that would be pedantry.
-		private static bool Extract(string archivePath, string destination, out string failure)
-		{
-			failure = null;
-			string destinationFull = Path.GetFullPath(destination).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-			using (ZipArchive archive = ZipFile.OpenRead(archivePath))
-			{
-				string prefix = CommonPrefix(archive);
-				foreach (ZipArchiveEntry entry in archive.Entries)
-				{
-					if (string.IsNullOrEmpty(entry.Name)) continue; // a directory entry
-					string relative = entry.FullName.Replace('/', Path.DirectorySeparatorChar);
-					if (prefix.Length > 0 && relative.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-					{
-						relative = relative.Substring(prefix.Length);
-					}
-					// Flatten. This game keeps every save file directly in Saves\, so a nested
-					// path in an archive is either noise or an attempt at something.
-					relative = Path.GetFileName(relative);
-					if (relative.Length == 0) continue;
-
-					string target = Path.GetFullPath(Path.Combine(destination, relative));
-					if (!target.StartsWith(destinationFull, StringComparison.OrdinalIgnoreCase))
-					{
-						failure = "that archive tries to write outside this server's save directory";
-						return false;
-					}
-					entry.ExtractToFile(target, true);
-				}
-			}
-			return true;
-		}
-
-		private static string CommonPrefix(ZipArchive archive)
-		{
-			string prefix = null;
-			foreach (ZipArchiveEntry entry in archive.Entries)
-			{
-				if (string.IsNullOrEmpty(entry.Name)) continue;
-				string full = entry.FullName.Replace('/', Path.DirectorySeparatorChar);
-				int slash = full.IndexOf(Path.DirectorySeparatorChar);
-				if (slash <= 0) return string.Empty; // something sits at the root: no common prefix
-				string head = full.Substring(0, slash + 1);
-				if (prefix == null) prefix = head;
-				else if (!string.Equals(prefix, head, StringComparison.OrdinalIgnoreCase)) return string.Empty;
-			}
-			return prefix ?? string.Empty;
-		}
-
 		// ------------------------------------------------------------------
 		// Bookkeeping
 		// ------------------------------------------------------------------
-		private static void Prune(string keepId)
-		{
-			try
-			{
-				List<Summary> all = List();
-				int kept = 0;
-				for (int i = 0; i < all.Count; i++)
-				{
-					if (!string.IsNullOrEmpty(keepId) && string.Equals(all[i].Id, keepId, StringComparison.Ordinal)) continue;
-					if (kept++ < KeepNewest) continue;
-					string path = Path.Combine(_snapshotDirectory, all[i].Id + ".zip");
-					try { File.Delete(path); } catch { }
-				}
-			}
-			catch { }
-		}
-
 		private static string NewId(string reason)
 		{
 			string safe = string.Empty;
