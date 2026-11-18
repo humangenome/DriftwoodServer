@@ -208,7 +208,8 @@ public class RestoreImportTests : IDisposable
         string before = Tree(_root);
 
         Assert.False(SnapshotFiles.Stage(archive, _instance, _snapshots, _saves, out string failure));
-        Assert.Contains("is a link or junction, so nothing was changed", failure);
+        Assert.Equal("Nothing was changed. A folder on this server points somewhere else, so the restore stopped. Contact your host.", failure);
+        Assert.Contains("is a link or junction", SnapshotFiles.LastLinkProblem);
         Assert.Equal(before, Tree(_root));
         // The same check runs at the next start, before a staged world is swapped in.
         Assert.NotNull(SnapshotFiles.RestoreLinkProblem(_instance, _snapshots, _saves));
@@ -237,7 +238,7 @@ public class RestoreImportTests : IDisposable
         string saves = Tree(_saves);
 
         Assert.False(SnapshotFiles.Stage(archive, _instance, _snapshots, _saves, out string failure));
-        Assert.Equal("that archive unpacks to more than 64 MB", failure);
+        Assert.Equal("Your world is safe. That zip holds more than 64 MB, far more than a How to Fish world. Zip only the Saves folder and try again.", failure);
         Assert.False(Directory.Exists(Pending));
         Assert.Equal(saves, Tree(_saves));
     }
@@ -266,7 +267,7 @@ public class RestoreImportTests : IDisposable
         File.WriteAllBytes(archive, bytes);
 
         Assert.False(SnapshotFiles.Stage(archive, _instance, _snapshots, _saves, out string failure));
-        Assert.Equal("that archive is damaged: a file in it holds more than the size it states", failure);
+        Assert.Equal("Your world is safe. That zip is damaged. Make the zip again and upload it.", failure);
         Assert.False(Directory.Exists(Pending));
         Assert.Equal("live world", File.ReadAllText(Path.Combine(_saves, "Driftwood.txt")));
     }
@@ -279,7 +280,7 @@ public class RestoreImportTests : IDisposable
         using var destination = new MemoryStream();
         long left = SnapshotFiles.MaxUnpackedBytes;
         Assert.False(SnapshotFiles.CopyCapped(source, destination, 1000, ref left, SnapshotFiles.MaxUnpackedBytes, out string failure));
-        Assert.Contains("more than the size it states", failure);
+        Assert.Equal("Your world is safe. That zip is damaged. Make the zip again and upload it.", failure);
         Assert.True(destination.Length <= 1000);
     }
 
@@ -292,7 +293,7 @@ public class RestoreImportTests : IDisposable
         string archive = Zip("many.zip", entries.ToArray());
 
         Assert.False(SnapshotFiles.Stage(archive, _instance, _snapshots, _saves, out string failure));
-        Assert.Equal("that archive holds more than 1000 files and folders", failure);
+        Assert.Equal("Your world is safe. That zip has more than 1,000 files. Zip only the Saves folder and try again.", failure);
         Assert.False(Directory.Exists(Pending));
     }
 
@@ -445,5 +446,15 @@ public class RestoreImportTests : IDisposable
 
         SnapshotFiles.Prune(_instance, _snapshots, 20, null);
         Assert.Equal(25, Names(target).Count);
+    }
+
+    // The approved owner words name the caps (2026-11-18): a change to either cap must change the words too.
+    [Fact]
+    public void TheOwnerWordsMatchTheCaps()
+    {
+        Assert.Equal(64L * 1024L * 1024L, SnapshotFiles.MaxUnpackedBytes);
+        Assert.Contains("64 MB", SnapshotFiles.TooBigWords);
+        Assert.Equal(1000, SnapshotFiles.MaxEntries);
+        Assert.Contains("1,000 files", SnapshotFiles.TooManyFilesWords);
     }
 }

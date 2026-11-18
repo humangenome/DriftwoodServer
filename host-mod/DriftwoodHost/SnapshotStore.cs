@@ -304,7 +304,12 @@ namespace DriftwoodHost
 				string pending = PendingDirectory;
 				try
 				{
-					if (!SnapshotFiles.Stage(archivePath, _instanceRoot, _snapshotDirectory, _saveDirectory, out failure)) return false;
+					if (!SnapshotFiles.Stage(archivePath, _instanceRoot, _snapshotDirectory, _saveDirectory, out failure))
+					{
+						if (failure == SnapshotFiles.LinkWords)
+							Plugin.Log?.LogError("World restore refused: " + SnapshotFiles.LastLinkProblem + "; nothing was changed.");
+						return false;
+					}
 					if (!ReconcileWorldName(pending, out failure)) { Discard(pending); return false; }
 				}
 				catch (Exception exception)
@@ -443,11 +448,14 @@ namespace DriftwoodHost
 			SnapshotFiles.Discard(directory);
 		}
 
-		// Nothing is written into or deleted from a snapshot store that is a link.
+		// Nothing is written into or deleted from a snapshot store that is a link. The owner gets the
+		// approved sentence; which folder it was goes to the host log.
 		private static string StoreLinkProblem()
 		{
 			string problem = FolderLinks.Problem(_instanceRoot, _snapshotDirectory);
-			return problem == null ? null : problem + ", so nothing was changed";
+			if (problem == null) return null;
+			Plugin.Log?.LogError("World backups refused: " + problem + "; nothing was changed.");
+			return SnapshotFiles.LinkWords;
 		}
 
 		// Called by the HTTP layer AFTER the response has been written, so the launcher sees

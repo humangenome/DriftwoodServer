@@ -25,6 +25,18 @@ namespace DriftwoodHost
 		// still stops an archive of a million empty entries from making a million files.
 		internal const int MaxEntries = 1000;
 
+		// WHAT THE OWNER IS TOLD, word for word as approved on 2026-11-18. The first two name the
+		// caps above (64 MB, 1,000 files); a test holds them together. Which folder was a link
+		// goes to the host log only (LastLinkProblem), never to the owner.
+		internal const string TooBigWords = "Your world is safe. That zip holds more than 64 MB, far more than a How to Fish world. Zip only the Saves folder and try again.";
+		internal const string DamagedWords = "Your world is safe. That zip is damaged. Make the zip again and upload it.";
+		internal const string TooManyFilesWords = "Your world is safe. That zip has more than 1,000 files. Zip only the Saves folder and try again.";
+		internal const string LinkWords = "Nothing was changed. A folder on this server points somewhere else, so the restore stopped. Contact your host.";
+
+		// The folder behind the last LinkWords refusal, for the host log. Callers hold the
+		// snapshot store's lock.
+		internal static string LastLinkProblem;
+
 		// The staged-restore folder inside the snapshot store. The leading dot keeps it out of the
 		// *.zip listing.
 		internal const string PendingName = ".pending-restore";
@@ -61,10 +73,11 @@ namespace DriftwoodHost
 			string pending = PendingDirectory(snapshotDirectory);
 			// Before anything is deleted: a previous staged restore is removed below, and removing
 			// it through a link would remove whatever the link points at.
-			failure = RestoreLinkProblem(instanceRoot, snapshotDirectory, saveDirectory);
-			if (failure != null)
+			string link = RestoreLinkProblem(instanceRoot, snapshotDirectory, saveDirectory);
+			if (link != null)
 			{
-				failure += ", so nothing was changed";
+				LastLinkProblem = link;
+				failure = LinkWords;
 				return false;
 			}
 			try
@@ -74,10 +87,11 @@ namespace DriftwoodHost
 				FolderLinks.DeleteIfReal(pending);
 				Directory.CreateDirectory(pending);
 				// Again, right before the unpack writes anything.
-				failure = RestoreLinkProblem(instanceRoot, snapshotDirectory, saveDirectory);
-				if (failure != null)
+				link = RestoreLinkProblem(instanceRoot, snapshotDirectory, saveDirectory);
+				if (link != null)
 				{
-					failure += ", so nothing was changed";
+					LastLinkProblem = link;
+					failure = LinkWords;
 					Discard(pending);
 					return false;
 				}
@@ -121,7 +135,7 @@ namespace DriftwoodHost
 			{
 				if (archive.Entries.Count > maxEntries)
 				{
-					failure = "that archive holds more than " + maxEntries + " files and folders";
+					failure = TooManyFilesWords;
 					return false;
 				}
 				long left = maxBytes;
@@ -172,12 +186,12 @@ namespace DriftwoodHost
 			{
 				if (written + read > statedLength)
 				{
-					failure = "that archive is damaged: a file in it holds more than the size it states";
+					failure = DamagedWords;
 					return false;
 				}
 				if (read > left)
 				{
-					failure = "that archive unpacks to more than " + (maxBytes / (1024L * 1024L)) + " MB";
+					failure = TooBigWords;
 					return false;
 				}
 				destination.Write(buffer, 0, read);
