@@ -156,6 +156,10 @@ namespace DriftwoodHost
 				if (failure != null) return false;
 				string candidate = NewId(reason);
 				string path = Path.Combine(_snapshotDirectory, candidate + ".zip");
+				// Written under a name the backup list never reads (it lists *.zip only), then renamed: a
+				// backup that fails part way never shows up as a backup, so the owner's "nothing was
+				// changed" holds (Security, 2026-11-19).
+				string partial = Path.Combine(_snapshotDirectory, candidate + ".partial");
 				try
 				{
 					if (!System.IO.Directory.Exists(_saveDirectory))
@@ -163,13 +167,14 @@ namespace DriftwoodHost
 						failure = "this server's save directory does not exist yet";
 						return false;
 					}
-					if (File.Exists(path)) File.Delete(path);
-					ZipDirectory(_saveDirectory, path);
+					if (File.Exists(partial)) File.Delete(partial);
+					ZipDirectory(_saveDirectory, partial);
+					File.Move(partial, path);
 					id = candidate;
 				}
 				catch (Exception exception)
 				{
-					try { if (File.Exists(path)) File.Delete(path); } catch { }
+					try { if (File.Exists(partial)) File.Delete(partial); } catch { }
 					failure = Unexpected("World backup", exception);
 					return false;
 				}
@@ -244,13 +249,17 @@ namespace DriftwoodHost
 				if (failure != null) return false;
 				string candidate = NewId("imported");
 				string path = Path.Combine(_snapshotDirectory, candidate + ".zip");
+				// The same: copied under a name the list never reads, then renamed.
+				string partial = Path.Combine(_snapshotDirectory, candidate + ".partial");
 				try
 				{
-					File.Copy(temporaryZipPath, path, true);
+					File.Copy(temporaryZipPath, partial, true);
+					File.Move(partial, path);
 					id = candidate;
 				}
 				catch (Exception exception)
 				{
+					try { if (File.Exists(partial)) File.Delete(partial); } catch { }
 					failure = Unexpected("World upload", exception);
 					return false;
 				}
