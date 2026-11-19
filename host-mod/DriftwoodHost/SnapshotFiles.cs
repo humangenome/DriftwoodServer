@@ -39,6 +39,14 @@ namespace DriftwoodHost
 		// hold the snapshot store's lock.
 		internal static string LastLinkProblem;
 
+		// Anything unexpected during a restore, upload or backup. The owner gets this fixed sentence;
+		// the exception's own text goes to the host log only (LastFailureDetail), because it can carry
+		// the server's paths (Security, 2026-11-19).
+		internal const string UnexpectedWords = "Your world is safe and nothing was changed. The server could not finish this. Try again, and contact your host if it happens again.";
+
+		// The exception behind the last UnexpectedWords from Stage, for the host log.
+		internal static string LastFailureDetail;
+
 		// Null when a backup or an upload may write into the snapshot store, else the owner's words
 		// (BackupLinkWords); which folder it was is in LastLinkProblem.
 		internal static string StoreLinkProblem(string instanceRoot, string snapshotDirectory)
@@ -115,7 +123,8 @@ namespace DriftwoodHost
 			}
 			catch (Exception exception)
 			{
-				failure = exception.GetType().Name + ": " + exception.Message;
+				LastFailureDetail = exception.GetType().Name + ": " + exception.Message;
+				failure = UnexpectedWords;
 				Discard(pending);
 				return false;
 			}

@@ -477,4 +477,19 @@ public class RestoreImportTests : IDisposable
         Assert.False(SnapshotFiles.Stage(Zip("restore.zip", ("Driftwood.txt", "restored")), _instance, _snapshots, _saves, out string failure));
         Assert.Equal("Nothing was changed. A folder on this server points somewhere else, so the restore stopped. Contact your host.", failure);
     }
+
+    // Security 11/19: an exception's text (which can carry the server's paths) never goes back to the owner.
+    [Fact]
+    public void AnUnexpectedFailureGivesTheOwnerTheFixedSentenceAndKeepsTheDetailForTheLog()
+    {
+        string notAZip = Path.Combine(_root, "not-a-zip.zip");
+        File.WriteAllText(notAZip, "this is not a zip archive");
+
+        Assert.False(SnapshotFiles.Stage(notAZip, _instance, _snapshots, _saves, out string failure));
+
+        Assert.Equal("Your world is safe and nothing was changed. The server could not finish this. Try again, and contact your host if it happens again.", failure);
+        Assert.DoesNotContain(_root, failure);
+        Assert.Contains("Exception", SnapshotFiles.LastFailureDetail);
+        Assert.False(Directory.Exists(SnapshotFiles.PendingDirectory(_snapshots)));
+    }
 }

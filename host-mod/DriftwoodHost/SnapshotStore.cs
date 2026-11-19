@@ -170,7 +170,7 @@ namespace DriftwoodHost
 				catch (Exception exception)
 				{
 					try { if (File.Exists(path)) File.Delete(path); } catch { }
-					failure = exception.GetType().Name + ": " + exception.Message;
+					failure = Unexpected("World backup", exception);
 					return false;
 				}
 				SnapshotFiles.Prune(_instanceRoot, _snapshotDirectory, KeepNewest, keepId);
@@ -251,7 +251,7 @@ namespace DriftwoodHost
 				}
 				catch (Exception exception)
 				{
-					failure = exception.GetType().Name + ": " + exception.Message;
+					failure = Unexpected("World upload", exception);
 					return false;
 				}
 				SnapshotFiles.Prune(_instanceRoot, _snapshotDirectory, KeepNewest, null);
@@ -308,13 +308,15 @@ namespace DriftwoodHost
 					{
 						if (failure == SnapshotFiles.LinkWords)
 							Plugin.Log?.LogError("World restore refused: " + SnapshotFiles.LastLinkProblem + "; nothing was changed.");
+						else if (failure == SnapshotFiles.UnexpectedWords)
+							Plugin.Log?.LogError("World restore failed: " + SnapshotFiles.LastFailureDetail + "; nothing was changed.");
 						return false;
 					}
 					if (!ReconcileWorldName(pending, out failure)) { Discard(pending); return false; }
 				}
 				catch (Exception exception)
 				{
-					failure = exception.GetType().Name + ": " + exception.Message;
+					failure = Unexpected("World restore", exception);
 					Discard(pending);
 					return false;
 				}
@@ -326,7 +328,10 @@ namespace DriftwoodHost
 					// A world that cannot be saved is a world we cannot safely replace: without
 					// the pre-restore copy the customer has no way back if the archive turns out
 					// to be the wrong one.
-					failure = "the current world could not be backed up first (" + preFailure + ")";
+					// A fixed owner sentence from the backup goes back as it is, not inside another sentence.
+					failure = preFailure == SnapshotFiles.UnexpectedWords || preFailure == SnapshotFiles.BackupLinkWords
+						? preFailure
+						: "the current world could not be backed up first (" + preFailure + ")";
 					Discard(pending);
 					return false;
 				}
@@ -338,7 +343,7 @@ namespace DriftwoodHost
 				}
 				catch (Exception exception)
 				{
-					failure = exception.GetType().Name + ": " + exception.Message;
+					failure = Unexpected("World restore", exception);
 					Discard(pending);
 					return false;
 				}
@@ -446,6 +451,14 @@ namespace DriftwoodHost
 		private static void Discard(string directory)
 		{
 			SnapshotFiles.Discard(directory);
+		}
+
+		// The owner never gets an exception's text, which can carry the server's paths (Security,
+		// 2026-11-19): it goes to the host log, and the owner gets the fixed sentence.
+		private static string Unexpected(string what, Exception exception)
+		{
+			Plugin.Log?.LogError(what + " failed: " + exception.GetType().Name + ": " + exception.Message + "; nothing was changed.");
+			return SnapshotFiles.UnexpectedWords;
 		}
 
 		// Nothing is written into or deleted from a snapshot store that is a link. The owner gets the
