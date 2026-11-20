@@ -487,7 +487,7 @@ public class RestoreImportTests : IDisposable
 
         Assert.False(SnapshotFiles.Stage(notAZip, _instance, _snapshots, _saves, out string failure));
 
-        Assert.Equal("Your world is safe and nothing was changed. The server could not finish this. Try again, and contact your host if it happens again.", failure);
+        Assert.Equal("Your world was not changed. The server could not finish this. Try again, and contact your host if it happens again.", failure);
         Assert.DoesNotContain(_root, failure);
         Assert.Contains("Exception", SnapshotFiles.LastFailureDetail);
         Assert.False(Directory.Exists(SnapshotFiles.PendingDirectory(_snapshots)));
