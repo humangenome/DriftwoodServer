@@ -4,8 +4,6 @@ All notable changes to DriftwoodServer are recorded here.
 
 ## [0.1.17] - 2026-11-20
 
-<!-- DRAFT: the first two lines under Changed are approved (Ryan, 11/18). The line "Chat replies and console output use plainer words..." and the four lines under Fixed wait for Ryan's yes. Before the tag, in one commit: delete each line he does not approve, delete Fixed if none is left, and delete this comment. -->
-
 ### Changed
 
 - A world zip that would unpack to more than 64 MB, or that holds more than 1,000 files, is now refused before the server stops, so the world keeps running.
