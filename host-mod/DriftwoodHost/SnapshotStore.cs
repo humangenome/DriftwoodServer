@@ -29,10 +29,8 @@ namespace DriftwoodHost
 		// realistic size.
 		internal const long MaxImportBytes = 64L * 1024L * 1024L;
 
-		// Newest N kept. A snapshot per restore plus a manual one now and then is a slow
-		// drip, but "slow" and "bounded" are different words and only one of them is safe on
-		// a shared box.
-		private const int KeepNewest = 20;
+		// A stored backup is never removed by this store: not for its age, not for how many there
+		// are. It may be the only copy of that world, and a removal has no undo.
 
 		private static string _saveDirectory = string.Empty;
 		private static string _snapshotDirectory = string.Empty;
@@ -122,14 +120,6 @@ namespace DriftwoodHost
 		// worst possible failure for a backup because it only shows up when it is restored.
 		internal static bool Create(string reason, out string id, out string failure)
 		{
-			return Create(reason, out id, out failure, null);
-		}
-
-		// keepId: a snapshot Prune must not delete in this call. A restore passes the archive it is
-		// restoring from: with 20 snapshots stored, the pre-restore copy made 21 and Prune deleted
-		// the oldest, so restoring the oldest snapshot deleted it and then failed (audit 2026-10-30).
-		internal static bool Create(string reason, out string id, out string failure, string keepId)
-		{
 			id = string.Empty;
 			failure = null;
 			if (!Ready)
@@ -169,7 +159,6 @@ namespace DriftwoodHost
 					failure = exception.GetType().Name + ": " + exception.Message;
 					return false;
 				}
-				Prune(keepId);
 			}
 			Plugin.Log?.LogInfo("World snapshot " + id + " taken (" + reason + ").");
 			return true;
@@ -248,7 +237,6 @@ namespace DriftwoodHost
 					failure = exception.GetType().Name + ": " + exception.Message;
 					return false;
 				}
-				Prune(null);
 			}
 			return true;
 		}
@@ -291,8 +279,7 @@ namespace DriftwoodHost
 
 			lock (Sync)
 			{
-				// Extract first: a corrupt archive is caught before anything else happens, and the
-				// archive is read before the pre-restore copy below can count towards the limit.
+				// Extract first: a corrupt archive is caught before anything else happens.
 				string pending = PendingDirectory;
 				try
 				{
@@ -312,7 +299,7 @@ namespace DriftwoodHost
 
 				string preId;
 				string preFailure;
-				if (!Create("pre-restore", out preId, out preFailure, id))
+				if (!Create("pre-restore", out preId, out preFailure))
 				{
 					// A world that cannot be saved is a world we cannot safely replace: without
 					// the pre-restore copy the customer has no way back if the archive turns out
@@ -561,23 +548,6 @@ namespace DriftwoodHost
 		// ------------------------------------------------------------------
 		// Bookkeeping
 		// ------------------------------------------------------------------
-		private static void Prune(string keepId)
-		{
-			try
-			{
-				List<Summary> all = List();
-				int kept = 0;
-				for (int i = 0; i < all.Count; i++)
-				{
-					if (!string.IsNullOrEmpty(keepId) && string.Equals(all[i].Id, keepId, StringComparison.Ordinal)) continue;
-					if (kept++ < KeepNewest) continue;
-					string path = Path.Combine(_snapshotDirectory, all[i].Id + ".zip");
-					try { File.Delete(path); } catch { }
-				}
-			}
-			catch { }
-		}
-
 		private static string NewId(string reason)
 		{
 			string safe = string.Empty;
