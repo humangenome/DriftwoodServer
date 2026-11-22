@@ -394,60 +394,6 @@ public class RestoreImportTests : IDisposable
         Assert.Equal(elsewhere, Tree(_elsewhere));
     }
 
-    // ---- pruning the store --------------------------------------------------------------------
-
-    private static void Snapshots(string folder, int count)
-    {
-        Directory.CreateDirectory(folder);
-        DateTime oldest = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        for (int i = 0; i < count; i++)
-        {
-            string path = Path.Combine(folder, "s" + i.ToString("00") + ".zip");
-            File.WriteAllText(path, "zip " + i);
-            File.SetLastWriteTimeUtc(path, oldest.AddMinutes(i));    // s00 oldest, s24 newest
-        }
-    }
-
-    private static List<string> Names(string folder)
-    {
-        var names = new List<string>();
-        foreach (string file in Directory.GetFiles(folder, "*.zip")) names.Add(Path.GetFileNameWithoutExtension(file));
-        names.Sort(StringComparer.Ordinal);
-        return names;
-    }
-
-    [Fact]
-    public void Prune_NeverDeletesTheNewestOrTheArchiveBeingRestored()
-    {
-        Snapshots(_snapshots, 25);
-
-        SnapshotFiles.Prune(_instance, _snapshots, 20, "s00");
-        List<string> kept = Names(_snapshots);
-        Assert.Equal(21, kept.Count);
-        Assert.Contains("s24", kept);
-        Assert.Contains("s00", kept);
-        Assert.DoesNotContain("s01", kept);
-        Assert.DoesNotContain("s04", kept);
-        Assert.Contains("s05", kept);
-
-        SnapshotFiles.Prune(_instance, _snapshots, 20, null);
-        kept = Names(_snapshots);
-        Assert.Equal(20, kept.Count);
-        Assert.Contains("s24", kept);
-        Assert.DoesNotContain("s00", kept);
-    }
-
-    [Fact]
-    public void Prune_DeletesNothingWhenTheStoreIsALink()
-    {
-        string target = Path.Combine(_elsewhere, "zips");
-        Snapshots(target, 25);
-        FolderLink(_snapshots, target);
-
-        SnapshotFiles.Prune(_instance, _snapshots, 20, null);
-        Assert.Equal(25, Names(target).Count);
-    }
-
     // The approved owner words name the caps (2026-11-18): a change to either cap must change the words too.
     [Fact]
     public void TheOwnerWordsMatchTheCaps()
