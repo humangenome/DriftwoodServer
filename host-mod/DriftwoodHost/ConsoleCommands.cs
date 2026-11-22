@@ -109,7 +109,7 @@ namespace DriftwoodHost
 					string id, failure;
 					if (!SnapshotStore.Create("console", out id, out failure))
 					{
-						output = "couldn't take a backup: " + failure;
+						output = failure == SnapshotFiles.BackupNoRoomWords ? failure : "couldn't take a backup: " + failure;
 						return false;
 					}
 					output = "backup taken: " + id;

@@ -134,7 +134,7 @@ public class SnapshotKeepTests : IDisposable
             SnapshotFiles.FreeBytes = _ => SnapshotFiles.FreeSpaceFloorBytes + needed - 1;
             string id = null, failure = null;
             Assert.False(WithMainThread(() => SnapshotStore.Create("manual", out id, out failure)));
-            Assert.Equal(SnapshotFiles.UnexpectedWords, failure);
+            Assert.Equal(SnapshotFiles.BackupNoRoomWords, failure);
             Assert.Equal(before.OrderBy(f => f), Directory.GetFiles(_snapshots).OrderBy(f => f));
 
             SnapshotFiles.FreeBytes = _ => SnapshotFiles.FreeSpaceFloorBytes + needed;
@@ -154,10 +154,37 @@ public class SnapshotKeepTests : IDisposable
         {
             SnapshotFiles.FreeBytes = _ => SnapshotFiles.FreeSpaceFloorBytes + new FileInfo(upload).Length - 1;
             Assert.False(SnapshotStore.Adopt(upload, out string id, out string failure));
-            Assert.Equal(SnapshotFiles.UnexpectedWords, failure);
+            Assert.Equal(SnapshotFiles.RestoreNoRoomWords, failure);
             Assert.Equal(before.OrderBy(f => f), Directory.GetFiles(_snapshots).OrderBy(f => f));
         }
         finally { SnapshotFiles.FreeBytes = probe; }
+    }
+
+    [Fact]
+    public void A_restore_with_no_room_for_its_copy_gives_that_reason()
+    {
+        string[] before = Stored(25);
+        string stored = Path.GetFileNameWithoutExtension(before[^2]);
+        Func<string, long?> probe = SnapshotFiles.FreeBytes;
+        try
+        {
+            SnapshotFiles.FreeBytes = _ => SnapshotFiles.FreeSpaceFloorBytes - 1;
+            (bool ok, string failure) = WithMainThread(() => (SnapshotStore.Restore(stored, out string why), why));
+
+            Assert.False(ok);
+            Assert.Equal(SnapshotFiles.RestoreNoRoomWords, failure);
+            Assert.Equal("live world", File.ReadAllText(Path.Combine(_saves, "Island.txt")));
+            Assert.Equal(before.OrderBy(f => f), Directory.GetFiles(_snapshots).OrderBy(f => f));
+            Assert.False(Directory.Exists(SnapshotFiles.PendingDirectory(_snapshots)));
+        }
+        finally { SnapshotFiles.FreeBytes = probe; }
+    }
+
+    [Fact]
+    public void The_room_refusals_are_the_approved_words()
+    {
+        Assert.Equal("Your other backups are safe. This one wasn't saved because the server's drive is almost full. Free up space, or ask your host.", SnapshotFiles.BackupNoRoomWords);
+        Assert.Equal("Your world is safe. It wasn't replaced because the server's drive is too full to back it up first. Free up space, or ask your host.", SnapshotFiles.RestoreNoRoomWords);
     }
 
     [Fact]

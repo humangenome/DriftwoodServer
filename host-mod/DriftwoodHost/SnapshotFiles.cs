@@ -45,6 +45,10 @@ namespace DriftwoodHost
 		// the server's paths (Security, 2026-11-19).
 		internal const string UnexpectedWords = "Your world was not changed. The server could not finish this. Try again, and contact your host if it happens again.";
 
+		// Refused for room, word for word: a backup, then a restore, upload or world copy (approved 2026-11-22).
+		internal const string BackupNoRoomWords = "Your other backups are safe. This one wasn't saved because the server's drive is almost full. Free up space, or ask your host.";
+		internal const string RestoreNoRoomWords = "Your world is safe. It wasn't replaced because the server's drive is too full to back it up first. Free up space, or ask your host.";
+
 		// The exception behind the last UnexpectedWords from Stage, for the host log.
 		internal static string LastFailureDetail;
 

@@ -161,7 +161,7 @@ namespace DriftwoodHost
 					foreach (string file in System.IO.Directory.GetFiles(_saveDirectory)) bytes += new FileInfo(file).Length;
 					if (!SnapshotFiles.HasRoom(_snapshotDirectory, bytes))
 					{
-						failure = SnapshotFiles.UnexpectedWords;
+						failure = SnapshotFiles.BackupNoRoomWords;
 						Plugin.Log?.LogWarning(failure);
 						return false;
 					}
@@ -252,7 +252,7 @@ namespace DriftwoodHost
 				{
 					if (!SnapshotFiles.HasRoom(_snapshotDirectory, new FileInfo(temporaryZipPath).Length))
 					{
-						failure = SnapshotFiles.UnexpectedWords;
+						failure = SnapshotFiles.RestoreNoRoomWords;
 						Plugin.Log?.LogWarning(failure);
 						return false;
 					}
@@ -339,7 +339,8 @@ namespace DriftwoodHost
 					// the pre-restore copy the customer has no way back if the archive turns out
 					// to be the wrong one.
 					// A fixed owner sentence from the backup goes back as it is, not inside another sentence.
-					failure = preFailure == SnapshotFiles.UnexpectedWords || preFailure == SnapshotFiles.BackupLinkWords
+					failure = preFailure == SnapshotFiles.BackupNoRoomWords ? SnapshotFiles.RestoreNoRoomWords
+						: preFailure == SnapshotFiles.UnexpectedWords || preFailure == SnapshotFiles.BackupLinkWords
 						? preFailure
 						: "the current world could not be backed up first (" + preFailure + ")";
 					Discard(pending);
