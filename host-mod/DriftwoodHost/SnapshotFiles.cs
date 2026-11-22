@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Runtime.InteropServices;
 
 namespace DriftwoodHost
 {
@@ -59,6 +60,35 @@ namespace DriftwoodHost
 
 		// The staged-restore folder inside the snapshot store. The leading dot keeps it out of the
 		// *.zip listing.
+		// THE FLOOR. No backup or upload is written that would leave the drive with less free space than
+		// this. It is refused, and nothing stored is removed to make room. The folder itself is asked, so
+		// a folder kept on another drive answers for that drive. A drive that can't be read refuses nothing.
+		internal const long FreeSpaceFloorBytes = 2L * 1024L * 1024L * 1024L;
+
+		internal static Func<string, long?> FreeBytes = FreeBytesOf;
+
+		internal static bool HasRoom(string folder, long bytes)
+		{
+			long? free = FreeBytes(folder);
+			return !free.HasValue || free.Value - bytes >= FreeSpaceFloorBytes;
+		}
+
+		private static long? FreeBytesOf(string folder)
+		{
+			try
+			{
+				if (Path.DirectorySeparatorChar != '\\') return new DriveInfo(folder).AvailableFreeSpace;
+				ulong available, total, free;
+				if (!GetDiskFreeSpaceExW(folder, out available, out total, out free)) return null;
+				return (long)Math.Min(available, (ulong)long.MaxValue);
+			}
+			catch { return null; }
+		}
+
+		[DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+		[return: MarshalAs(UnmanagedType.Bool)]
+		private static extern bool GetDiskFreeSpaceExW(string directory, out ulong available, out ulong total, out ulong free);
+
 		internal const string PendingName = ".pending-restore";
 
 		internal static string PendingDirectory(string snapshotDirectory)

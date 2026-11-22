@@ -157,6 +157,14 @@ namespace DriftwoodHost
 						failure = "this server's save directory does not exist yet";
 						return false;
 					}
+					long bytes = 0;
+					foreach (string file in System.IO.Directory.GetFiles(_saveDirectory)) bytes += new FileInfo(file).Length;
+					if (!SnapshotFiles.HasRoom(_snapshotDirectory, bytes))
+					{
+						failure = SnapshotFiles.UnexpectedWords;
+						Plugin.Log?.LogWarning(failure);
+						return false;
+					}
 					if (File.Exists(partial)) File.Delete(partial);
 					ZipDirectory(_saveDirectory, partial);
 					File.Move(partial, path);
@@ -242,6 +250,12 @@ namespace DriftwoodHost
 				string partial = Path.Combine(_snapshotDirectory, candidate + ".partial");
 				try
 				{
+					if (!SnapshotFiles.HasRoom(_snapshotDirectory, new FileInfo(temporaryZipPath).Length))
+					{
+						failure = SnapshotFiles.UnexpectedWords;
+						Plugin.Log?.LogWarning(failure);
+						return false;
+					}
 					File.Copy(temporaryZipPath, partial, true);
 					File.Move(partial, path);
 					id = candidate;

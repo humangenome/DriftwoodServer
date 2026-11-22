@@ -122,4 +122,48 @@ public class SnapshotKeepTests : IDisposable
         Assert.All(before, file => Assert.True(File.Exists(file), file));
         Assert.Equal(721, Count());
     }
+
+    [Fact]
+    public void A_backup_that_would_leave_less_than_2_GiB_free_is_refused()
+    {
+        string[] before = Stored(25);
+        long needed = new FileInfo(Path.Combine(_saves, "Island.txt")).Length;
+        Func<string, long?> probe = SnapshotFiles.FreeBytes;
+        try
+        {
+            SnapshotFiles.FreeBytes = _ => SnapshotFiles.FreeSpaceFloorBytes + needed - 1;
+            string id = null, failure = null;
+            Assert.False(WithMainThread(() => SnapshotStore.Create("manual", out id, out failure)));
+            Assert.Equal(SnapshotFiles.UnexpectedWords, failure);
+            Assert.Equal(before.OrderBy(f => f), Directory.GetFiles(_snapshots).OrderBy(f => f));
+
+            SnapshotFiles.FreeBytes = _ => SnapshotFiles.FreeSpaceFloorBytes + needed;
+            Assert.True(WithMainThread(() => SnapshotStore.Create("manual", out id, out failure)));
+            Assert.All(before, file => Assert.True(File.Exists(file), file));
+        }
+        finally { SnapshotFiles.FreeBytes = probe; }
+    }
+
+    [Fact]
+    public void An_upload_that_would_leave_less_than_2_GiB_free_is_refused()
+    {
+        string[] before = Stored(25);
+        string upload = Zip(Path.Combine(_root, "upload.zip"));
+        Func<string, long?> probe = SnapshotFiles.FreeBytes;
+        try
+        {
+            SnapshotFiles.FreeBytes = _ => SnapshotFiles.FreeSpaceFloorBytes + new FileInfo(upload).Length - 1;
+            Assert.False(SnapshotStore.Adopt(upload, out string id, out string failure));
+            Assert.Equal(SnapshotFiles.UnexpectedWords, failure);
+            Assert.Equal(before.OrderBy(f => f), Directory.GetFiles(_snapshots).OrderBy(f => f));
+        }
+        finally { SnapshotFiles.FreeBytes = probe; }
+    }
+
+    [Fact]
+    public void The_floor_is_2_GiB_and_the_real_drive_can_be_read()
+    {
+        Assert.Equal(2L * 1024 * 1024 * 1024, SnapshotFiles.FreeSpaceFloorBytes);
+        Assert.True(SnapshotFiles.FreeBytes(_snapshots) > 0);
+    }
 }
