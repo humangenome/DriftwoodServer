@@ -91,7 +91,7 @@ public class SnapshotKeepTests : IDisposable
 
         Assert.True(SnapshotStore.Adopt(Zip(Path.Combine(_root, "upload.zip")), out _, out string failure), failure);
 
-        Assert.Empty(before.Where(file => !File.Exists(file)));
+        Assert.All(before, file => Assert.True(File.Exists(file), file));
         Assert.Equal(stored + 1, Count());
     }
 
@@ -105,7 +105,7 @@ public class SnapshotKeepTests : IDisposable
         (bool ok, string failure) = WithMainThread(() => (SnapshotStore.Create(reason, out _, out string why), why));
 
         Assert.True(ok, failure);
-        Assert.Empty(before.Where(file => !File.Exists(file)));
+        Assert.All(before, file => Assert.True(File.Exists(file), file));
         Assert.Equal(721, Count());
     }
 
@@ -119,7 +119,7 @@ public class SnapshotKeepTests : IDisposable
         (bool ok, string failure) = WithMainThread(() => (SnapshotStore.Restore(oldest, out string why), why));
 
         Assert.True(ok, failure);
-        Assert.Empty(before.Where(file => !File.Exists(file)));
+        Assert.All(before, file => Assert.True(File.Exists(file), file));
         Assert.Equal(721, Count());
     }
 }
