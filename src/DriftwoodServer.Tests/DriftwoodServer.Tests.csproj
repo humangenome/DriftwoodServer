@@ -73,6 +73,9 @@
     <!-- Where the owner's spawn command drops an item when a player has not moved since joining.
          The Unity half (OwnerGameplay.SpawnItem) only reads positions and carries the choice out. -->
     <Compile Include="../../host-mod/DriftwoodHost/SpawnPlacement.cs" Link="Linked/SpawnPlacement.cs" />
+    <!-- The world backup store itself, over SnapshotStoreStandIns.cs, so a test can prove which stored
+         backups survive a new one, an upload and a restore. -->
+    <Compile Include="../../host-mod/DriftwoodHost/SnapshotStore.cs" Link="Linked/SnapshotStore.cs" />
   </ItemGroup>
   <PropertyGroup>
     <NoWarn>$(NoWarn);CS8618;CS8600;CS8601;CS8602;CS8603;CS8604;CS8625</NoWarn>

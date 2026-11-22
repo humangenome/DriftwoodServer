@@ -5,8 +5,8 @@ using System.IO.Compression;
 
 namespace DriftwoodHost
 {
-	// The file half of world snapshots: unpacking an archive into the staged-restore folder, the
-	// link checks around it, and pruning the store. No Unity or BepInEx dependency, so the test
+	// The file half of world snapshots: unpacking an archive into the staged-restore folder and the
+	// link checks around it. No Unity or BepInEx dependency, so the test
 	// project links it. SnapshotStore keeps the game half (saving the world first, the world
 	// name, ending the process).
 	internal static class SnapshotFiles
@@ -236,33 +236,6 @@ namespace DriftwoodHost
 				else if (!string.Equals(prefix, head, StringComparison.OrdinalIgnoreCase)) return string.Empty;
 			}
 			return prefix ?? string.Empty;
-		}
-
-		// Newest keepNewest archives kept, plus keepId: a restore passes the archive it is
-		// restoring from, because with the store full the pre-restore copy made one too many and
-		// pruning deleted the oldest, so restoring the oldest snapshot deleted it and then failed
-		// (audit 2026-10-30). Nothing is deleted when the store is a link.
-		internal static void Prune(string instanceRoot, string snapshotDirectory, int keepNewest, string keepId)
-		{
-			try
-			{
-				if (FolderLinks.Problem(instanceRoot, snapshotDirectory) != null) return;
-				List<FileInfo> all = new List<FileInfo>();
-				foreach (string file in Directory.GetFiles(snapshotDirectory, "*.zip"))
-				{
-					try { all.Add(new FileInfo(file)); } catch { }
-				}
-				all.Sort((a, b) => b.LastWriteTimeUtc.CompareTo(a.LastWriteTimeUtc));
-				int kept = 0;
-				foreach (FileInfo info in all)
-				{
-					string id = Path.GetFileNameWithoutExtension(info.Name);
-					if (!string.IsNullOrEmpty(keepId) && string.Equals(id, keepId, StringComparison.Ordinal)) continue;
-					if (kept++ < keepNewest) continue;
-					try { File.Delete(info.FullName); } catch { }
-				}
-			}
-			catch { }
 		}
 	}
 }
