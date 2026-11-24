@@ -2,6 +2,8 @@
 
 All notable changes to DriftwoodServer are recorded here.
 
+## [0.1.18]
+
 ## [0.1.17] - 2026-11-20
 
 ### Changed
