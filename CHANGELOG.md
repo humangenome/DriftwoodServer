@@ -4,6 +4,10 @@ All notable changes to DriftwoodServer are recorded here.
 
 ## [0.1.18]
 
+### Fixed
+
+- Stored world backups are no longer deleted to make room. Before, only the newest 20 were kept.
+
 ## [0.1.17] - 2026-11-20
 
 ### Changed

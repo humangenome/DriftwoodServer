@@ -390,7 +390,6 @@ something changed, and on shutdown. Off switch: `[Leaderboard] Enabled = false`.
 
 A snapshot is a zip of the server's save directory, kept in `<instance root>\Snapshots` — beside
 `Logs\` and outside the game tree SteamCMD owns, so a validate cannot take a customer's backups.
-The newest 20 are kept.
 
 - `GET /api/v1/snapshots` → `{"snapshots":[{"id","taken_unix","size_bytes","sha256"}]}`
 - `POST /api/v1/snapshots` → `{"snapshot":{"id":"..."}}`. **Flushes the world first and refuses if
