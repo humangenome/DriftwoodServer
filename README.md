@@ -23,7 +23,7 @@ How to Fish has no dedicated server. Its co-op runs in a Steam lobby on one play
 Players add your server's IP and port in the Driftwood app and press **Connect**, or type it into How to Fish's own **Join Game** box. Each player loads the character saved under their own Steam account, whatever order the crew joins in.
 
 ### 💾 World backups
-`--snapshot` saves the world and zips it while the server runs. From the app's World window, the owner takes, downloads and restores snapshots and uploads a save from their PC. A restore is put in place at the next start, before the world loads, so the running game cannot write the old world back over it.
+The server saves the world and zips it while it runs. In the app's **World backups** window, the owner takes, downloads and restores backups and uploads a save from their PC. A restore takes effect when the server next starts.
 
 ### 🖥️ Server console
 The owner connects the app's Console tab with the server's admin password: status, players, saves and backups, kick and block, a `[Server]` line in everyone's chat, the crew's shared wallet, moving the crew to another island, and sending a stuck player back to the island spawn.
@@ -101,7 +101,7 @@ Copy [`appsettings.example.json`](appsettings.example.json) from the folder you 
 - every path to your layout from step 1 (`instanceId` is any short name, e.g. `my-server`)
 - `steamAppsDirectory`: your `steamapps` copy from step 2, or `""` if you skipped it
 - `serverName`: what players see in the Driftwood app
-- `authToken`: the admin password for this server's console and backups in the Driftwood app. Set one; without it every admin route refuses.
+- `authToken`: the admin password for this server's Console tab and World backups in the Driftwood app. Set one. Without it, neither works.
 - `gamePort`: the UDP port players connect to. `httpPort` stays `0`: the status and admin port then takes the port directly above `gamePort` on its own.
 - `discordWebhookUrl` (optional): see [Settings](#settings).
 
@@ -174,7 +174,7 @@ The settings you can change, in `appsettings.json`. DriftwoodServer.exe rewrites
 | Setting | Default | What it does |
 |---|---|---|
 | `serverName` | empty | The name players see in the Driftwood app |
-| `authToken` | empty | The admin password for the Console tab and World window. Empty refuses every admin call |
+| `authToken` | empty | The admin password for the Console tab and World backups. Empty turns both off |
 | `gamePort` | `22003` | The UDP port players connect to |
 | `slots` | `8` | How many players fit. A full server turns the next player away. How to Fish's Steam page says 1 to 4 players |
 | `worldName` | `Driftwood` | The world's file name in `Saves\`. A new name starts a new world |
