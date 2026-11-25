@@ -107,4 +107,73 @@ public class PluginConfigTests
         readiness.WorldName = "SomeoneElsesWorld";
         Assert.NotNull(PluginConfigWriter.AssertTookEffect(Options(), readiness));
     }
+
+    // The host mod reads its Steam Web API key file from [Identity] SteamWebApiKeyFile, and the
+    // supervisor rewrites the host's config on every start. Before 2026-11-25 the supervisor had
+    // no such setting and wrote no [Identity] section, so a self-hosted server could never turn on
+    // the Steam check its README offers. Written by the supervisor, read back by the host's own
+    // config loader: the path arrives, and only the path.
+    [Fact]
+    public void TheSteamKeyFileReachesTheHostsConfig()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "driftwood-steamkey-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            HostOptions options = Options();
+            options.GameRoot = Path.Combine(root, "How to Fish");
+            options.SteamWebApiKeyFile = Path.Combine(root, "secrets", "steam web api key.txt");
+            PluginConfigWriter.Write(options);
+
+            string written = File.ReadAllText(options.PluginConfigPath);
+            Assert.Contains("[Identity]", written);
+            DriftwoodHost.HostConfig host = DriftwoodHost.HostConfig.Load(options.PluginConfigPath);
+            Assert.Equal(options.SteamWebApiKeyFile, host.SteamWebApiKeyFile);
+            Assert.Equal(string.Empty, host.SteamWebApiKey);
+            Assert.Empty(host.UnrecognisedKeys);
+        }
+        finally
+        {
+            try { Directory.Delete(root, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void NoSteamKeyFileWritesNoIdentitySection()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "driftwood-steamkey-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            HostOptions options = Options();
+            options.GameRoot = Path.Combine(root, "How to Fish");
+            PluginConfigWriter.Write(options);
+
+            Assert.DoesNotContain("[Identity]", File.ReadAllText(options.PluginConfigPath));
+            Assert.Equal(string.Empty, DriftwoodHost.HostConfig.Load(options.PluginConfigPath).SteamWebApiKeyFile);
+        }
+        finally
+        {
+            try { Directory.Delete(root, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void TheSteamKeyFileLoadsFromAppsettingsAndResolvesBesideIt()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "driftwood-steamkey-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            string config = Path.Combine(root, "appsettings.json");
+            File.WriteAllText(config,
+                "{ \"instanceId\": \"my-server\", \"gameRoot\": \"How to Fish\", \"stateRoot\": \"host-state\", " +
+                "\"saveRoot\": \"Saves\", \"steamWebApiKeyFile\": \"steam-key.txt\", " +
+                "\"pinnedBuild\": { \"assemblySha256\": \"" + new string('a', 64) + "\" } }");
+            HostOptions options = HostOptions.Load(config);
+            Assert.Equal(Path.Combine(root, "steam-key.txt"), options.SteamWebApiKeyFile);
+        }
+        finally
+        {
+            try { Directory.Delete(root, true); } catch { }
+        }
+    }
 }

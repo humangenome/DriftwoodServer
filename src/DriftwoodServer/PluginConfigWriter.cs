@@ -52,6 +52,14 @@ internal static class PluginConfigWriter
         text.AppendLine("[Host]");
         text.AppendLine($"SuppressGhostHost = {Bool(options.SuppressGhostHost)}");
         text.AppendLine();
+        // Optional, like [Discord] below: only written when set. Only the key file's PATH goes in
+        // this file; the host reads the key from that file at start and never logs it.
+        if (!string.IsNullOrWhiteSpace(options.SteamWebApiKeyFile))
+        {
+            text.AppendLine("[Identity]");
+            text.AppendLine($"SteamWebApiKeyFile = {Sanitise(options.SteamWebApiKeyFile.Trim(), 1024)}");
+            text.AppendLine();
+        }
         // Optional and fail-soft on the mod side; only written when set, so the common case
         // stays byte-identical to what every existing server already runs.
         if (!string.IsNullOrWhiteSpace(options.DiscordWebhookUrl))

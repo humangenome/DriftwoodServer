@@ -46,6 +46,9 @@ public class ExampleConfigTests
         // retail client.
         Assert.False(options.PauseWorldWhenEmpty);
         Assert.Equal(0, options.IdleFrameRate);
+        // Present so a self-hoster can find it, and empty: the Steam check stays off until they
+        // name a key file.
+        Assert.Equal(string.Empty, options.SteamWebApiKeyFile);
     }
 
     [Fact]
