@@ -163,7 +163,7 @@ Everyone joins from the Driftwood app: add `<your address>:22003`, then **Connec
 | Port | Protocol | What uses it |
 |---|---|---|
 | `gamePort` (default 22003) | UDP | the game: players connect here |
-| `gamePort + 1` | TCP | status and admin: the Driftwood app reads who is on here, and the owner's Console tab and World window connect here |
+| `gamePort + 1` | TCP | status and admin: the Driftwood app reads who is on here, and the owner's Console tab and World backups connect here |
 
 Keep 22003 and its neighbours rather than 7777: many games default to 7777, and two servers on one port fail to start.
 
@@ -205,7 +205,7 @@ Each [release](https://github.com/HumanGenome/DriftwoodServer/releases) carries 
 
 ## Contributing
 
-Bugs: [open an issue](https://github.com/HumanGenome/DriftwoodServer/issues) with the server version, the game build and the `reason` from `host-ready.json` if it won't start. See [CONTRIBUTING.md](CONTRIBUTING.md) before a pull request. Security problems go through [private reporting](.github/SECURITY.md), never a public issue.
+Bugs: [open an issue](https://github.com/HumanGenome/DriftwoodServer/issues) with the server version, the game build and the `reason` from `host-state\status.json` if it won't start. See [CONTRIBUTING.md](CONTRIBUTING.md) before a pull request. Security problems go through [private reporting](.github/SECURITY.md), never a public issue.
 
 ## Community note
 

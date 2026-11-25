@@ -2,13 +2,7 @@
 
 All notable changes to DriftwoodServer are recorded here.
 
-## [0.1.18]
-
-### Fixed
-
-- Stored world backups are no longer deleted to make room. Before, only the newest 20 were kept.
-
-## [0.1.17] - 2026-11-20
+## [Unreleased]
 
 ### Changed
 
@@ -22,6 +16,12 @@ All notable changes to DriftwoodServer are recorded here.
 - When a restore, backup or upload fails for an unexpected reason, the owner now sees one plain message, and a backup that failed part way no longer shows up in the backup list.
 - Self-hosting: server backups now skip linked folders, so a backup only holds files from the server's own save folder.
 - Self-hosting: when the server refuses to host, a world does not load or the game stops unexpectedly, DriftwoodServer.exe now exits with code 4 instead of 0, so a service manager set to restart on failure starts it again.
+
+## [0.1.18] - 2026-11-24
+
+### Fixed
+
+- Stored world backups are no longer deleted to make room. Before, only the newest 20 were kept.
 
 ## [0.1.16] - 2026-11-11
 
