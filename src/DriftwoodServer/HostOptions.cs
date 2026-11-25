@@ -50,6 +50,12 @@ internal sealed class HostOptions
     // Passed through to the host mod's [Discord] section; empty means alerts are off. The mod
     // also honours <instance root>\Driftwood\discord-webhook.txt, which outranks this value.
     public string DiscordWebhookUrl { get; set; } = string.Empty;
+    // Optional: a file holding a Steam Web API key. Passed through to the host mod's [Identity]
+    // section, so the host checks with Steam that each joining player owns the account they
+    // claim and shows real names. The supervisor rewrites the host's config on every start, so
+    // this is the only way a self-hosted server can turn that on. Only the path is written; the
+    // key stays in its own file. Empty means off. A relative path is resolved like the others.
+    public string SteamWebApiKeyFile { get; set; } = string.Empty;
 
     public int WorldReadyTimeoutSeconds { get; set; } = 240;
     public int ReadinessStaleSeconds { get; set; } = 30;
@@ -78,6 +84,8 @@ internal sealed class HostOptions
             options.BackupRoot = Resolve(baseDirectory, options.BackupRoot, nameof(BackupRoot));
         if (!string.IsNullOrWhiteSpace(options.SteamAppsDirectory))
             options.SteamAppsDirectory = Resolve(baseDirectory, options.SteamAppsDirectory, nameof(SteamAppsDirectory));
+        if (!string.IsNullOrWhiteSpace(options.SteamWebApiKeyFile))
+            options.SteamWebApiKeyFile = Resolve(baseDirectory, options.SteamWebApiKeyFile, nameof(SteamWebApiKeyFile));
         options.InstanceRoot = string.IsNullOrWhiteSpace(options.InstanceRoot)
             ? Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(options.GameRoot)) ?? options.GameRoot
             : Resolve(baseDirectory, options.InstanceRoot, nameof(InstanceRoot));
